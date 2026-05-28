@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ExternalLink, Clock } from "lucide-react"
+import { ExternalLink, Clock, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { BoardCard, User } from "@/types"
 import { useAuth } from "@/context/AuthContext"
-import { updateSubtaskApi, updateInternStatusApi, reviewSubmissionApi, submitWorkApi } from "@/api/subtasks"
+import { updateSubtaskApi, deleteSubtaskApi, updateInternStatusApi, reviewSubmissionApi, submitWorkApi } from "@/api/subtasks"
 import { updateLeaderTaskApi } from "@/api/tasks"
 
 interface Props {
@@ -89,6 +89,11 @@ export default function TaskModal({ card, open, onClose, subtasksKey, tasksKey }
       score: Number(reviewScore) || 0,
       review_comment: reviewComment,
     }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: subtasksKey }); resetClose() },
+  })
+
+  const deleteSubtaskMutation = useMutation({
+    mutationFn: () => deleteSubtaskApi(card!.id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: subtasksKey }); resetClose() },
   })
 
@@ -217,6 +222,17 @@ export default function TaskModal({ card, open, onClose, subtasksKey, tasksKey }
                   <button onClick={() => setView("submit")}
                     className="w-full h-10 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-900 transition-colors">
                     Submit work
+                  </button>
+                )}
+
+                {/* Leader delete subtask */}
+                {isLeader && !isTask && (
+                  <button
+                    onClick={() => { if (confirm(`Delete "${card.title}"?`)) deleteSubtaskMutation.mutate() }}
+                    disabled={deleteSubtaskMutation.isPending}
+                    className="w-full h-9 flex items-center justify-center gap-1.5 border border-red-200 text-red-500 rounded-xl text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 size={13} /> Delete subtask
                   </button>
                 )}
 

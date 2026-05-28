@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Trash2, UserPlus, Users, Plus, Crown, X } from "lucide-react"
 import type { User, Team, Role } from "@/types"
-import { getUsersApi, createUserApi, deleteUserApi } from "@/api/users"
+import { getUsersApi, createUserApi, updateUserApi, deleteUserApi } from "@/api/users"
 import { getTeamsApi, createTeamApi, addTeamMemberApi, removeTeamMemberApi } from "@/api/teams"
 import { cn } from "@/lib/utils"
 
@@ -51,6 +51,7 @@ export default function Admin() {
 function UsersPanel() {
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
+  const [changePasswordUser, setChangePasswordUser] = useState<User | null>(null)
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["users"],
@@ -96,6 +97,12 @@ function UsersPanel() {
                 {u.role}
               </span>
               <button
+                onClick={() => setChangePasswordUser(u)}
+                className="text-xs font-medium text-gray-400 hover:text-black transition-colors"
+              >
+                Change password
+              </button>
+              <button
                 onClick={() => { if (confirm(`Delete ${u.full_name}?`)) deleteMutation.mutate(u.id) }}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
               >
@@ -115,6 +122,14 @@ function UsersPanel() {
         <CreateUserModal
           onClose={() => setCreateOpen(false)}
           onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["users"] }); setCreateOpen(false) }}
+        />
+      )}
+
+      {changePasswordUser && (
+        <ChangePasswordModal
+          user={changePasswordUser}
+          onClose={() => setChangePasswordUser(null)}
+          onSuccess={() => setChangePasswordUser(null)}
         />
       )}
     </div>
@@ -378,6 +393,52 @@ function ManageMembersModal({ team, users, onClose, onSuccess }: {
           className="w-full h-10 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
           Done
         </button>
+      </div>
+    </Modal>
+  )
+}
+
+/* ================================================================== */
+/* Change password modal                                               */
+/* ================================================================== */
+function ChangePasswordModal({ user, onClose, onSuccess }: {
+  user: User; onClose: () => void; onSuccess: () => void
+}) {
+  const [password,  setPassword]  = useState("")
+  const [confirm,   setConfirm]   = useState("")
+  const [error,     setError]     = useState("")
+
+  const mutation = useMutation({
+    mutationFn: () => updateUserApi(user.id, { password }),
+    onSuccess,
+    onError: (e: any) => setError(e?.response?.data?.detail ?? "Failed to update password"),
+  })
+
+  const mismatch = confirm.length > 0 && password !== confirm
+
+  return (
+    <Modal title={`Change password — ${user.full_name}`} onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        <Field label="New password">
+          <input
+            value={password} onChange={(e) => { setPassword(e.target.value); setError("") }}
+            type="password" placeholder="••••••••" autoFocus className="input"
+          />
+        </Field>
+        <Field label="Confirm password">
+          <input
+            value={confirm} onChange={(e) => setConfirm(e.target.value)}
+            type="password" placeholder="••••••••" className="input"
+          />
+          {mismatch && <p className="text-xs text-red-500 mt-1">Passwords do not match</p>}
+        </Field>
+        {error && <p className="text-xs text-red-500">{error}</p>}
+        <ModalActions
+          onCancel={onClose} onConfirm={() => mutation.mutate()}
+          loading={mutation.isPending}
+          disabled={!password.trim() || password !== confirm}
+          label="Update password"
+        />
       </div>
     </Modal>
   )
