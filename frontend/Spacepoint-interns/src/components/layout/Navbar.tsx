@@ -70,7 +70,7 @@ export default function Navbar() {
     : "?"
 
   return (
-    <nav className="relative bg-white border-b border-gray-100">
+    <nav className="relative bg-white border-b border-gray-100 shadow-[0_4px_12px_rgba(0,0,0,0.06)]">
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-28">
         {/* Left */}
         <div className="flex items-center gap-3">
