@@ -101,7 +101,6 @@ export default function TaskModal({ card, open, onClose, subtasksKey, tasksKey }
   if (!card) return null
 
   const isTask = card.kind === "task"
-  const latestSub = card.submissions?.[card.submissions.length - 1]
   const pendingSubs = card.submissions?.filter((s) => s.status === "submitted") ?? []
 
   const formattedDue = card.due_date
