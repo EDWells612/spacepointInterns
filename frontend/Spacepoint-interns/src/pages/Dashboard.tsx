@@ -6,12 +6,12 @@ import {
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core"
 import { CSS } from "@dnd-kit/utilities"
 import {
-  Plus, X, Pencil, Clock, ExternalLink, FolderOpen, ChevronRight, Trash2, Check, RotateCcw,
+  Plus, X, Pencil, Clock, ExternalLink, ChevronRight, Trash2, Check, RotateCcw,
 } from "lucide-react"
 import KanbanBoard from "@/components/kanban/KanbanBoard"
 import { useAuth } from "@/context/AuthContext"
 import type { Project, ProjectStatus, Task, Team, Subtask, WorkStatus } from "@/types"
-import { getProjectsApi, createProjectApi, updateProjectApi } from "@/api/projects"
+import { getProjectsApi, createProjectApi, updateProjectApi, deleteProjectApi } from "@/api/projects"
 import { getAllTasksApi, createTaskApi, updateTaskApi, deleteTaskApi } from "@/api/tasks"
 import { getTeamsApi } from "@/api/teams"
 import { getTaskSubtasksApi } from "@/api/subtasks"
@@ -84,6 +84,16 @@ function AdminDashboard() {
     },
     onError: (_e, _v, ctx) => { if (ctx?.prev) queryClient.setQueryData(["projects"], ctx.prev) },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+  })
+
+  /* ── delete project mutation ──────────────────────────────────── */
+  const deleteProjectMutation = useMutation({
+    mutationFn: (id: string) => deleteProjectApi(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+      queryClient.invalidateQueries({ queryKey: ["tasks", "admin"] })
+      setActiveProject(null)
+    },
   })
 
   /* ── task move mutation ────────────────────────────────────────── */
@@ -258,6 +268,10 @@ function AdminDashboard() {
               status: (activeProject.status ?? "active") === "active" ? "completed" : "active",
             })
           }
+          onDelete={() => {
+            if (confirm(`Delete "${activeProject.title}" and all its tasks?`))
+              deleteProjectMutation.mutate(activeProject.id)
+          }}
         />
       )}
 
@@ -379,7 +393,6 @@ function ProjectCard({ project, taskCount, onManage }: {
             <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{project.description}</p>
           )}
         </div>
-        <FolderOpen size={14} className="text-gray-300 flex-shrink-0 mt-0.5" />
       </div>
 
       <div className="flex items-center justify-between">
@@ -410,11 +423,11 @@ function ProjectCardOverlay({ project, taskCount }: { project: Project; taskCoun
 /* ================================================================== */
 /* Project tasks panel (modal with Add Task)                           */
 /* ================================================================== */
-function ProjectTasksPanel({ project, tasks, teams, teamName, onTaskClick, onClose, onTaskCreated, onToggleStatus }: {
+function ProjectTasksPanel({ project, tasks, teams, teamName, onTaskClick, onClose, onTaskCreated, onToggleStatus, onDelete }: {
   project: Project; tasks: Task[]; teams: Team[]
   teamName: (id: string) => string
   onTaskClick: (t: Task) => void; onClose: () => void; onTaskCreated: () => void
-  onToggleStatus: () => void
+  onToggleStatus: () => void; onDelete: () => void
 }) {
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const isDone = (project.status ?? "active") === "completed"
@@ -427,7 +440,6 @@ function ProjectTasksPanel({ project, tasks, teams, teamName, onTaskClick, onClo
         <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              <FolderOpen size={14} className="text-gray-400 flex-shrink-0" />
               <p className="text-base font-semibold text-black truncate">{project.title}</p>
             </div>
             {project.description && (
@@ -457,6 +469,13 @@ function ProjectTasksPanel({ project, tasks, teams, teamName, onTaskClick, onClo
                 <Plus size={12} /> Add task
               </button>
             )}
+            <button
+              onClick={onDelete}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+              title="Delete project"
+            >
+              <Trash2 size={15} />
+            </button>
             <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors">
               <X size={16} />
             </button>
@@ -713,7 +732,7 @@ function AdminTaskModal({ task, teams, projectName, onClose, onSaved, onDeleted,
               )}
               <div className="flex flex-wrap gap-2">
                 <span className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
-                  <FolderOpen size={11} /> {projectName}
+                  {projectName}
                 </span>
                 {task.due_date && (
                   <span className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
