@@ -41,6 +41,17 @@ async def get_proposals_by_team(db: AsyncSession, team_id: UUID):
     return result.scalars().all()
 
 
+async def get_proposals_by_user(db: AsyncSession, user_id: UUID):
+    """All proposals submitted by a specific user, newest first."""
+    result = await db.execute(
+        select(Proposal)
+        .where(Proposal.proposed_by == user_id)
+        .options(*_proposal_options())
+        .order_by(Proposal.created_at.desc())
+    )
+    return result.scalars().all()
+
+
 async def get_proposals_by_epic(db: AsyncSession, epic_id: UUID):
     result = await db.execute(
         select(Proposal).where(Proposal.epic_id == epic_id).options(*_proposal_options())

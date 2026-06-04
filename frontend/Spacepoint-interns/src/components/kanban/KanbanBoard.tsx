@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { createPortal } from "react-dom"
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDroppable, useDraggable,
 } from "@dnd-kit/core"
@@ -8,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { X, Lightbulb, MessageSquare, ArrowLeft, ChevronRight, Network, Layers, Info } from "lucide-react"
 import { useNavigate } from "@tanstack/react-router"
 import ManageModulesModal from "@/components/ManageModulesModal"
+import ProposalDetailDialog from "@/components/ProposalDetailDialog"
 import Column from "./Column"
 import TaskCard from "./TaskCard"
 import TaskModal from "./TaskModal"
@@ -18,7 +20,7 @@ import { useAuth } from "@/context/AuthContext"
 import { getLeaderTasksApi, getInternTasksApi, updateLeaderTaskApi, updateInternTaskStatusApi, submitTaskWorkApi } from "@/api/tasks"
 import { getLeaderEpicsApi, updateLeaderEpicApi } from "@/api/epics"
 import { getLeaderProjectsApi, getInternProjectsApi } from "@/api/projects"
-import { createProposalApi, getLeaderAllProposalsApi, reviewProposalApi } from "@/api/proposals"
+import { createProposalApi, getLeaderAllProposalsApi, getInternProposalsApi, reviewProposalApi } from "@/api/proposals"
 import { cn } from "@/lib/utils"
 
 const COLUMNS: { title: string; status: WorkStatus }[] = [
@@ -48,8 +50,12 @@ export default function KanbanBoard() {
   const [selectedCard,  setSelectedCard]  = useState<BoardCard | null>(null)
   const [pendingDrop,   setPendingDrop]   = useState<BoardCard | null>(null)
   const [createOpen,    setCreateOpen]    = useState(false)
-  const [proposeOpen,   setProposeOpen]   = useState(false)
-  const [proposalsOpen, setProposalsOpen] = useState(false)
+  const [proposeOpen,        setProposeOpen]        = useState(false)
+  const [proposalsOpen,      setProposalsOpen]      = useState(false)
+  const [myProposalsOpen,    setMyProposalsOpen]    = useState(false)
+  const [seenProposalIds,   setSeenProposalIds]    = useState<Set<string>>(
+    () => new Set(JSON.parse(localStorage.getItem(`seen_proposals_${currentUser?.id}`) ?? "[]"))
+  )
   const [boardEpic,     setBoardEpic]     = useState<Epic | null>(null)   // leader drill-down
   const [modulesOpen,   setModulesOpen]   = useState(false)
 
@@ -76,6 +82,13 @@ export default function KanbanBoard() {
     queryKey: ["proposals", "leader"],
     queryFn: getLeaderAllProposalsApi,
     enabled: isLeader,
+  })
+
+  const { data: internProposals = [] } = useQuery<Proposal[]>({
+    queryKey: ["proposals", "intern"],
+    queryFn: getInternProposalsApi,
+    enabled: isIntern,
+    refetchInterval: 30_000,
   })
 
   const pendingProposals = leaderProposals.filter((p) => p.status === "pending")
@@ -186,10 +199,30 @@ export default function KanbanBoard() {
         </div>
         <div className="flex items-center gap-2">
           {isIntern && (
-            <button onClick={() => setProposeOpen(true)}
-              className="flex items-center gap-1.5 h-9 px-4 border border-gray-200 text-sm font-medium rounded-xl text-gray-700 hover:bg-gray-50 transition-colors">
-              <Lightbulb size={14} /> Propose idea
-            </button>
+            <>
+              <button onClick={() => {
+                  setMyProposalsOpen(true)
+                  // mark all currently reviewed proposals as seen
+                  const reviewedIds = internProposals
+                    .filter((p) => p.status !== "pending")
+                    .map((p) => p.id)
+                  const next = new Set([...seenProposalIds, ...reviewedIds])
+                  setSeenProposalIds(next)
+                  localStorage.setItem(`seen_proposals_${currentUser?.id}`, JSON.stringify([...next]))
+                }}
+                className="relative flex items-center gap-1.5 h-9 px-4 border border-gray-200 text-sm font-medium rounded-xl text-gray-700 hover:bg-gray-50 transition-colors">
+                <MessageSquare size={14} /> My proposals
+                {internProposals.filter((p) => p.status !== "pending" && !seenProposalIds.has(p.id)).length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#a880ff] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {internProposals.filter((p) => p.status !== "pending" && !seenProposalIds.has(p.id)).length}
+                  </span>
+                )}
+              </button>
+              <button onClick={() => setProposeOpen(true)}
+                className="flex items-center gap-1.5 h-9 px-4 border border-gray-200 text-sm font-medium rounded-xl text-gray-700 hover:bg-gray-50 transition-colors">
+                <Lightbulb size={14} /> Propose idea
+              </button>
+            </>
           )}
           {isLeader && (
             <button onClick={() => setProposalsOpen(true)}
@@ -297,6 +330,13 @@ export default function KanbanBoard() {
           epic={boardEpic}
           role="leader"
           onClose={() => setModulesOpen(false)}
+        />
+      )}
+
+      {isIntern && myProposalsOpen && (
+        <InternProposalsModal
+          proposals={internProposals}
+          onClose={() => setMyProposalsOpen(false)}
         />
       )}
     </div>
@@ -423,7 +463,7 @@ function SubmitDialog({ card, tasksKey, onDone }: { card: BoardCard; tasksKey: s
   })
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
         <div>
           <p className="text-base font-semibold text-black">Submit work</p>
@@ -482,7 +522,7 @@ function CreateProposalModal({ tasks, onClose }: { tasks: Task[]; onClose: () =>
   })
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
         <div className="flex items-center justify-between">
           <div>
@@ -536,84 +576,171 @@ function CreateProposalModal({ tasks, onClose }: { tasks: Task[]; onClose: () =>
 function LeaderProposalsModal({ proposals, onClose, onRefresh }: {
   proposals: Proposal[]; onClose: () => void; onRefresh: () => void
 }) {
+  const [selected, setSelected] = useState<Proposal | null>(null)
+
   const reviewMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => reviewProposalApi(id, { status }, "leader"),
-    onSuccess: onRefresh,
+    onSuccess: () => { onRefresh(); setSelected(null) },
   })
 
   const pending  = proposals.filter((p) => p.status === "pending")
   const reviewed = proposals.filter((p) => p.status !== "pending")
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
-          <div>
-            <p className="text-base font-semibold text-black">Proposals</p>
-            <p className="text-xs text-gray-400 mt-0.5">{pending.length} pending · {reviewed.length} reviewed</p>
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+            <div>
+              <p className="text-base font-semibold text-black">Proposals</p>
+              <p className="text-xs text-gray-400 mt-0.5">{pending.length} pending · {reviewed.length} reviewed</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors">
+              <X size={16} />
+            </button>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors">
-            <X size={16} />
-          </button>
-        </div>
 
-        <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-3">
-          {proposals.length === 0 && (
-            <div className="flex items-center justify-center h-28">
-              <p className="text-sm text-gray-400">No proposals yet from your team</p>
-            </div>
-          )}
-
-          {pending.length > 0 && (
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Pending</p>
-          )}
-          {pending.map((p) => (
-            <div key={p.id} className="flex flex-col gap-2 p-3.5 border border-[#d6c7e1] rounded-xl bg-[#d6c7e1]/10">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-black">{p.title}</p>
-                  {p.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.description}</p>}
-                  <p className="text-[11px] text-gray-400 mt-1">by {p.proposer_name ?? "Unknown"}</p>
-                </div>
+          <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-3">
+            {proposals.length === 0 && (
+              <div className="flex items-center justify-center h-28">
+                <p className="text-sm text-gray-400">No proposals yet from your team</p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => reviewMutation.mutate({ id: p.id, status: "accepted" })}
-                  disabled={reviewMutation.isPending}
-                  className="flex-1 h-7 bg-black text-white rounded-lg text-[11px] font-medium hover:bg-gray-900 transition-colors disabled:opacity-50">
-                  Accept
-                </button>
-                <button
-                  onClick={() => reviewMutation.mutate({ id: p.id, status: "rejected" })}
-                  disabled={reviewMutation.isPending}
-                  className="flex-1 h-7 border border-gray-200 text-gray-600 rounded-lg text-[11px] font-medium hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-50">
-                  Reject
-                </button>
-              </div>
-            </div>
-          ))}
+            )}
 
-          {reviewed.length > 0 && (
-            <>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mt-2">Reviewed</p>
-              {reviewed.map((p) => (
-                <div key={p.id} className="flex items-start justify-between gap-2 p-3.5 border border-gray-100 rounded-xl opacity-70">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-black truncate">{p.title}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">by {p.proposer_name ?? "Unknown"}</p>
-                  </div>
-                  <span className={cn(
-                    "text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0",
-                    p.status === "accepted" ? "bg-black text-white" : "bg-gray-100 text-gray-400"
-                  )}>
-                    {p.status}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
+            {pending.length > 0 && (
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Pending</p>
+            )}
+            {pending.map((p) => (
+              <button key={p.id} onClick={() => setSelected(p)}
+                className="w-full text-left flex flex-col gap-1.5 p-3.5 border border-[#d6c7e1] rounded-xl bg-[#d6c7e1]/10 hover:bg-[#d6c7e1]/20 transition-colors">
+                <p className="text-sm font-semibold text-black">{p.title}</p>
+                {p.description && <p className="text-xs text-gray-500 line-clamp-2">{p.description}</p>}
+                <p className="text-[11px] text-gray-400">by {p.proposer_name ?? "Unknown"} · tap to review</p>
+              </button>
+            ))}
+
+            {reviewed.length > 0 && (
+              <>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mt-2">Reviewed</p>
+                {reviewed.map((p) => (
+                  <button key={p.id} onClick={() => setSelected(p)}
+                    className="w-full text-left flex items-start justify-between gap-2 p-3.5 border border-gray-100 rounded-xl opacity-70 hover:opacity-100 hover:bg-gray-50 transition-all">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-black truncate">{p.title}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">by {p.proposer_name ?? "Unknown"}</p>
+                    </div>
+                    <span className={cn(
+                      "text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0",
+                      p.status === "accepted" ? "bg-black text-white" : "bg-gray-100 text-gray-400"
+                    )}>
+                      {p.status}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {selected && (
+        <ProposalDetailDialog
+          proposal={selected}
+          onClose={() => setSelected(null)}
+          onAccept={selected.status === "pending" ? () => reviewMutation.mutate({ id: selected.id, status: "accepted" }) : undefined}
+          onReject={selected.status === "pending" ? () => reviewMutation.mutate({ id: selected.id, status: "rejected" }) : undefined}
+          isPending={reviewMutation.isPending}
+        />
+      )}
+    </>
+  )
+}
+
+/* ── Intern: view my proposals modal ─────────────────────────────────────── */
+function InternProposalsModal({ proposals, onClose }: {
+  proposals: Proposal[]; onClose: () => void
+}) {
+  const [selected, setSelected] = useState<Proposal | null>(null)
+
+  const pending  = proposals.filter((p) => p.status === "pending")
+  const reviewed = proposals.filter((p) => p.status !== "pending")
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+            <div>
+              <p className="text-base font-semibold text-black">My Proposals</p>
+              <p className="text-xs text-gray-400 mt-0.5">{pending.length} pending · {reviewed.length} reviewed</p>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 p-4 flex flex-col gap-3">
+            {proposals.length === 0 && (
+              <div className="flex items-center justify-center h-28">
+                <p className="text-sm text-gray-400">You haven't submitted any proposals yet</p>
+              </div>
+            )}
+
+            {pending.length > 0 && (
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Pending review</p>
+            )}
+            {pending.map((p) => (
+              <button key={p.id} onClick={() => setSelected(p)}
+                className="w-full text-left flex flex-col gap-1.5 p-3.5 border border-[#d6c7e1] rounded-xl bg-[#d6c7e1]/10 hover:bg-[#d6c7e1]/20 transition-colors">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-black truncate">{p.title}</p>
+                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-[#d6c7e1] text-[#643f83] flex-shrink-0">pending</span>
+                </div>
+                {p.description && <p className="text-xs text-gray-500 line-clamp-2">{p.description}</p>}
+                <p className="text-[11px] text-gray-400">
+                  {new Date(p.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              </button>
+            ))}
+
+            {reviewed.length > 0 && (
+              <>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mt-1">Reviewed</p>
+                {reviewed.map((p) => (
+                  <button key={p.id} onClick={() => setSelected(p)}
+                    className={cn(
+                      "w-full text-left flex items-start justify-between gap-2 p-3.5 rounded-xl border transition-all hover:shadow-sm",
+                      p.status === "accepted"
+                        ? "border-green-200 bg-green-50/60 hover:bg-green-50"
+                        : "border-red-100 bg-red-50/40 hover:bg-red-50/60"
+                    )}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-black truncate">{p.title}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {new Date(p.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                      </p>
+                    </div>
+                    <span className={cn(
+                      "text-[10px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0",
+                      p.status === "accepted" ? "bg-black text-white" : "bg-red-100 text-red-500"
+                    )}>
+                      {p.status}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {selected && (
+        <ProposalDetailDialog
+          proposal={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>,
+    document.body
   )
 }

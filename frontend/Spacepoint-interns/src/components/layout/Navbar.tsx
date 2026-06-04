@@ -31,7 +31,8 @@ export default function Navbar() {
     queryKey: ["notifications"],
     queryFn: getNotificationsApi,
     enabled: !!currentUser,
-    staleTime: 60_000,
+    staleTime: 20_000,
+    refetchInterval: 30_000,
   })
 
   const markAllMutation = useMutation({

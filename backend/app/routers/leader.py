@@ -13,6 +13,7 @@ from app.models.module import Module
 from app.models.epic import Epic
 from app.core.dependencies import require_leader
 from app.schemas.user import UserOut
+from app.schemas.team import TeamOut
 from app.schemas.epic import EpicOut, EpicUpdate
 from app.schemas.module import ModuleCreate, ModuleOut, ModuleUpdate
 from app.services import module as module_service
@@ -69,6 +70,13 @@ async def read_projects(db: AsyncSession = Depends(get_db), current_user: User =
 
 
 # ── Team ───────────────────────────────────────────────────────────────────────
+
+@router.get("/team", response_model=TeamOut)
+async def read_my_team(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    team = await _get_leader_team(db, current_user)
+    result = await db.execute(select(Team).where(Team.id == team.id).options(selectinload(Team.members)))
+    return result.scalars().first()
+
 
 @router.get("/team/members", response_model=List[UserOut])
 async def read_team_members(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):

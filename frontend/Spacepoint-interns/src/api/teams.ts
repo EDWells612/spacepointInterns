@@ -16,6 +16,12 @@ export const getTeamMembersApi = (teamId: string) =>
 export const getLeaderTeamMembersApi = () =>
   api.get<User[]>("/leader/team/members").then((r) => r.data)
 
+export const getLeaderTeamApi = () =>
+  api.get<Team>("/leader/team").then((r) => r.data)
+
+export const getInternTeamApi = () =>
+  api.get<Team>("/intern/team").then((r) => r.data)
+
 export const addTeamMemberApi = (teamId: string, userId: string) =>
   api.post<Team>(`/admin/teams/${teamId}/members`, null, { params: { user_id: userId } }).then((r) => r.data)
 

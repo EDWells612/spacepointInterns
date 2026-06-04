@@ -12,7 +12,11 @@ from app.schemas.proposal import ProposalCreate, ProposalOut
 from app.schemas.mind_map import TaskMindMapNoteUpdate, TaskMindMapNoteOut, MindMapLayoutOut
 from app.schemas.epic import EpicOut
 from app.schemas.project import ProjectOut
+from app.schemas.team import TeamOut
+from app.models.team import Team, team_members
 
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from app.services import task as task_service
 from app.services import proposal as proposal_service
 from app.services import mind_map as mind_map_service
@@ -53,7 +57,27 @@ async def submit_work(id: UUID, submit_in: TaskSubmissionCreate, db: AsyncSessio
     return await task_service.submit_task_work(db, id, submit_in, current_user.id)
 
 
+# ── Team ──────────────────────────────────────────────────────────────────────
+
+@router.get("/team", response_model=TeamOut)
+async def read_my_team(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    result = await db.execute(
+        select(Team)
+        .join(team_members, Team.id == team_members.c.team_id)
+        .where(team_members.c.user_id == current_user.id)
+        .options(selectinload(Team.members))
+    )
+    team = result.scalars().first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Not assigned to any team")
+    return team
+
+
 # ── Proposals ─────────────────────────────────────────────────────────────────
+
+@router.get("/proposals", response_model=List[ProposalOut])
+async def read_my_proposals(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    return await proposal_service.get_proposals_by_user(db, current_user.id)
 
 @router.post("/epics/{id}/proposals", response_model=ProposalOut)
 async def create_proposal(id: UUID, proposal_in: ProposalCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):

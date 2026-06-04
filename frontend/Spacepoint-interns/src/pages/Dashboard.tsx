@@ -12,6 +12,7 @@ import {
 import KanbanBoard from "@/components/kanban/KanbanBoard"
 import EpicDetailModal from "@/components/kanban/EpicDetailModal"
 import ManageModulesModal from "@/components/ManageModulesModal"
+import ProposalDetailDialog from "@/components/ProposalDetailDialog"
 import { useAuth } from "@/context/AuthContext"
 import type { Project, ProjectStatus, Task, Team, WorkStatus, Epic, Proposal } from "@/types"
 import { getProjectsApi, createProjectApi, updateProjectApi, deleteProjectApi } from "@/api/projects"
@@ -508,6 +509,7 @@ function ProjectTasksPanel({ project, tasks, onTaskClick, onClose, onTaskCreated
   const [createTaskOpen,  setCreateTaskOpen]  = useState(false)
   const [manageModulesOpen, setManageModulesOpen] = useState(false)
   const [prefillProposal, setPrefillProposal] = useState<{ title: string; description: string } | null>(null)
+  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null)
   const isDone = (project.status ?? "active") === "completed"
 
   const { data: epics = [], isLoading: epicsLoading } = useQuery<Epic[]>({
@@ -658,6 +660,12 @@ function ProjectTasksPanel({ project, tasks, onTaskClick, onClose, onTaskCreated
                 >
                   <Plus size={12} /> Add epic
                 </button>
+                <button
+                  onClick={() => navigate({ to: "/mind-map/project/$projectId", params: { projectId: project.id } })}
+                  className="flex items-center gap-1.5 h-8 px-3 border border-gray-200 text-gray-500 text-xs font-medium rounded-lg hover:border-black hover:text-black transition-colors"
+                >
+                  <Network size={12} /> Project map
+                </button>
                 <button onClick={onDelete}
                   className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors ml-auto" title="Delete project">
                   <Trash2 size={15} />
@@ -786,49 +794,32 @@ function ProjectTasksPanel({ project, tasks, onTaskClick, onClose, onTaskCreated
               </div>
             ) : (
               proposals.map((p) => (
-                <div key={p.id} className="flex flex-col gap-2 p-3.5 border border-gray-100 rounded-xl">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-black truncate">{p.title}</p>
-                      {p.description && (
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.description}</p>
-                      )}
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        by {p.proposer_name ?? "Unknown"} · {new Date(p.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </p>
-                    </div>
+                <button key={p.id} onClick={() => setSelectedProposal(p)}
+                  className={cn(
+                    "w-full text-left flex flex-col gap-2 p-4 rounded-xl border transition-all",
+                    p.status === "pending"
+                      ? "bg-white border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300"
+                      : "bg-gray-50 border-gray-100 opacity-70 hover:opacity-100 hover:bg-white"
+                  )}>
+                  <div className="flex items-center justify-between gap-2">
                     <span className={cn(
-                      "text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5",
+                      "text-[10px] font-semibold px-2.5 py-1 rounded-full",
                       p.status === "pending"  ? "bg-[#d6c7e1] text-[#643f83]" :
                       p.status === "accepted" ? "bg-black text-white" :
                       "bg-gray-100 text-gray-400"
                     )}>
                       {p.status}
                     </span>
+                    <p className="text-[11px] text-gray-400">
+                      {new Date(p.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
                   </div>
-                  {p.status === "pending" && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          reviewProposalMutation.mutate({ id: p.id, status: "accepted" })
-                          setPrefillProposal({ title: p.title, description: p.description ?? "" })
-                          setCreateTaskOpen(true)
-                        }}
-                        disabled={reviewProposalMutation.isPending}
-                        className="flex-1 h-7 bg-black text-white rounded-lg text-[11px] font-medium hover:bg-gray-900 transition-colors disabled:opacity-50"
-                      >
-                        Accept + Create task
-                      </button>
-                      <button
-                        onClick={() => reviewProposalMutation.mutate({ id: p.id, status: "rejected" })}
-                        disabled={reviewProposalMutation.isPending}
-                        className="flex-1 h-7 border border-gray-200 text-gray-600 rounded-lg text-[11px] font-medium hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
+                  <p className="text-sm font-semibold text-black leading-snug">{p.title}</p>
+                  {p.description && (
+                    <p className="text-xs text-gray-500 line-clamp-2">{p.description}</p>
                   )}
-                </div>
+                  <p className="text-[11px] text-gray-400">by {p.proposer_name ?? "Unknown"} · tap to review</p>
+                </button>
               ))
             )
           )}
@@ -870,6 +861,26 @@ function ProjectTasksPanel({ project, tasks, onTaskClick, onClose, onTaskCreated
           }}
         />
       )}
+
+      {/* Proposal detail dialog */}
+      {selectedProposal && (
+        <ProposalDetailDialog
+          proposal={selectedProposal}
+          onClose={() => setSelectedProposal(null)}
+          acceptLabel="Accept + Create task"
+          onAccept={selectedProposal.status === "pending" ? () => {
+            reviewProposalMutation.mutate({ id: selectedProposal.id, status: "accepted" })
+            setPrefillProposal({ title: selectedProposal.title, description: selectedProposal.description ?? "" })
+            setCreateTaskOpen(true)
+            setSelectedProposal(null)
+          } : undefined}
+          onReject={selectedProposal.status === "pending" ? () => {
+            reviewProposalMutation.mutate({ id: selectedProposal.id, status: "rejected" })
+            setSelectedProposal(null)
+          } : undefined}
+          isPending={reviewProposalMutation.isPending}
+        />
+      )}
     </div>
   )
 }
@@ -893,7 +904,7 @@ function CreateEpicModal({ project, onClose, onCreated }: {
   })
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
         <div className="flex items-center justify-between">
           <div>
@@ -964,7 +975,7 @@ function CreateTaskForEpicModal({ epic, onClose, onCreated, prefillTitle, prefil
   })
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[60] flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
         <div className="flex items-center justify-between">
           <div>
@@ -1245,7 +1256,7 @@ function AdminTaskModal({ task, projectName, onClose, onSaved, onDeleted, elevat
 
   return (
     <div className={cn(
-      "fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-4",
+      "fixed inset-0 bg-black/40 flex items-center justify-center p-4",
       elevated ? "z-[60]" : "z-50"
     )}>
       <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">

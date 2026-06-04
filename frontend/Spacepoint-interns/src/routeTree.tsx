@@ -8,6 +8,7 @@ import Profile from "./pages/Profile"
 import Admin from "./pages/Admin"
 import Tracker from "./pages/Tracker"
 import MindMap from "./pages/MindMap"
+import ProjectMindMap from "./pages/ProjectMindMap"
 
 const rootRoute = createRootRoute({ component: Outlet })
 
@@ -70,6 +71,12 @@ const mindMapRoute = createRoute({
   component: MindMap,
 })
 
+const projectMindMapRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/mind-map/project/$projectId",
+  component: ProjectMindMap,
+})
+
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   layoutRoute.addChildren([
@@ -80,5 +87,6 @@ export const routeTree = rootRoute.addChildren([
     adminRoute,
     trackerRoute,
     mindMapRoute,
+    projectMindMapRoute,
   ]),
 ])

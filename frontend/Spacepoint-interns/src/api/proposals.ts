@@ -12,6 +12,9 @@ export const getEpicProposalsApi = (epicId: string, role: "admin" | "leader") =>
 export const getLeaderAllProposalsApi = () =>
   api.get<Proposal[]>("/leader/proposals").then((r) => r.data)
 
+export const getInternProposalsApi = () =>
+  api.get<Proposal[]>("/intern/proposals").then((r) => r.data)
+
 export const reviewProposalApi = (
   proposalId: string,
   data: { status: string; review_note?: string },
