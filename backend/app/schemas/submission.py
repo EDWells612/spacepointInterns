@@ -1,23 +1,28 @@
 from pydantic import BaseModel, model_validator
 from typing import Optional, Any
+from decimal import Decimal
 from datetime import datetime
 from uuid import UUID
 from app.models.enums import SubmissionStatus
+
 
 class TaskSubmissionBase(BaseModel):
     link: str
     note: Optional[str] = None
 
+
 class TaskSubmissionCreate(TaskSubmissionBase):
-    pass
+    actual_time: Optional[Decimal] = None   # intern logs time spent on submission
+
 
 class TaskSubmissionReview(BaseModel):
     score: int
     review_comment: str
 
+
 class TaskSubmissionOut(TaskSubmissionBase):
     id: UUID
-    subtask_id: UUID
+    task_id: UUID
     submitted_by: UUID
     submitter_name: Optional[str] = None
     status: SubmissionStatus

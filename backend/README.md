@@ -21,8 +21,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Fill in the values (see Environment Variables below)
 
-# 4. Run database migrations (raw SQL)
-# Run the scripts in /sql against your database in order
+# 4. Run the v2 schema SQL against your database (see Database below)
 
 # 5. Start the server
 uvicorn app.main:app --reload
@@ -37,7 +36,7 @@ Interactive docs at `http://localhost:8000/docs`
 DATABASE_URL=postgresql+asyncpg://user:password@host:port/dbname
 SECRET_KEY=your-jwt-secret-key
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=720
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
@@ -54,20 +53,55 @@ app/
 └── services/        # Business logic layer
 ```
 
+## Work Hierarchy
+
+```
+Project → Epic → Module → Task → Submission
+```
+
+- **Project** — owned by admin
+- **Epic** — a workstream assigned to a team (auto-creates a "General" module)
+- **Module** — groups tasks within an epic; leaders/admins can add more
+- **Task** — intern-level work item with `expected_time` / `actual_time`
+- **Submission** — work link + actual time, scored on review
+
 ## API Routes
 
 | Prefix | Role | Description |
 |--------|------|-------------|
 | `/auth` | Public | Login, token refresh |
-| `/admin` | Admin | Users, teams, projects, tasks |
-| `/leader` | Leader | Team tasks, subtasks, submission review |
-| `/intern` | Intern | Assigned subtasks, submit work |
+| `/admin` | Admin | Users, teams, projects, epics, modules, tasks, submissions review, proposals, mind map, tracker |
+| `/leader` | Leader | Team epics & tasks, assign tasks, review submissions, proposals, mind map, tracker |
+| `/intern` | Intern | Assigned tasks, submit work, propose features, mind-map notes |
 | `/profile` | All | Current user profile |
 | `/notifications` | All | Notifications |
 
+### Key endpoints by feature
+
+| Feature | Endpoints |
+|---------|-----------|
+| Epics | `POST/GET /admin/projects/{id}/epics`, `GET /admin/epics` (all), `GET /leader/epics` (team), `GET/PATCH/DELETE /{role}/epics/{id}` |
+| Modules | `POST /{admin,leader}/epics/{id}/modules`, `PATCH/DELETE /{admin,leader}/modules/{id}` |
+| Tasks | `POST /{role}/modules/{id}/tasks`, `PATCH/DELETE /{role}/tasks/{id}`, `POST /{role}/tasks/{id}/assign` |
+| Submissions | `POST /intern/tasks/{id}/submit`, `PATCH /{role}/submissions/{id}/review` |
+| Proposals | `POST /intern/epics/{id}/proposals`, `GET /leader/proposals`, `PATCH /{role}/proposals/{id}` |
+| Mind map | `GET/PATCH /{role}/epics/{id}/mind-map`, `GET/PATCH /intern/tasks/{id}/mind-map-note` |
+| Tracker | `GET /{admin,leader}/tracker/{user_id}`, intern uses `GET /intern/tasks` |
+
+## Database
+
+The v2 schema is one SQL migration run against Supabase. Tables:
+`users`, `teams`, `team_members`, `projects`, `project_teams`, `epics`, `modules`,
+`tasks`, `task_assignees`, `task_submissions`, `proposals`, `mind_map_layouts`,
+`task_mind_map_notes`, `notifications`.
+
+Enums: `user_role`, `work_status`, `submission_status`.
+
 ## Notes
 
-- All primary keys are UUIDs
+- All primary keys are UUIDs (`gen_random_uuid()`)
 - Passwords are hashed with bcrypt
 - JWT access tokens are short-lived; refresh tokens are long-lived and rotated on use
+- Relationships are eagerly loaded with `selectinload` / `joinedload`; Pydantic `model_validator(mode="before")` reads loaded state to stay async-safe
+- Cascades flow down the hierarchy: deleting a project/epic/module removes everything beneath it
 - Alembic is set up but not yet in active use — schema changes are currently applied via raw SQL

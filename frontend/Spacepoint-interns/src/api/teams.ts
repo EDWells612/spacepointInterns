@@ -13,6 +13,9 @@ export const updateTeamApi = (id: string, data: Partial<{ name: string; leader_i
 export const getTeamMembersApi = (teamId: string) =>
   api.get<User[]>(`/teams/${teamId}/members`).then((r) => r.data)
 
+export const getLeaderTeamMembersApi = () =>
+  api.get<User[]>("/leader/team/members").then((r) => r.data)
+
 export const addTeamMemberApi = (teamId: string, userId: string) =>
   api.post<Team>(`/admin/teams/${teamId}/members`, null, { params: { user_id: userId } }).then((r) => r.data)
 

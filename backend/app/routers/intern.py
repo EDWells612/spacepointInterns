@@ -1,63 +1,84 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
 from typing import List
 from uuid import UUID
 
 from app.db.session import get_db
 from app.models.user import User
-from app.models.subtask import Subtask
-from app.models.submission import TaskSubmission
 from app.core.dependencies import require_intern
-from app.schemas.subtask import SubtaskOut, SubtaskStatusUpdate
+from app.schemas.task import TaskOut, TaskStatusUpdate
 from app.schemas.submission import TaskSubmissionCreate, TaskSubmissionOut
+from app.schemas.proposal import ProposalCreate, ProposalOut
+from app.schemas.mind_map import TaskMindMapNoteUpdate, TaskMindMapNoteOut, MindMapLayoutOut
+from app.schemas.epic import EpicOut
 from app.schemas.project import ProjectOut
 
-from app.services import subtask as subtask_service
+from app.services import task as task_service
+from app.services import proposal as proposal_service
+from app.services import mind_map as mind_map_service
+from app.services import epic as epic_service
 from app.services import project as project_service
 
 router = APIRouter(prefix="/intern", tags=["intern"])
 
+
+async def _verify_intern_task_access(db: AsyncSession, user: User, task_id: UUID):
+    task = await task_service.get_task_by_id(db, task_id)
+    if user not in task.assignees:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not assigned to this task")
+    return task
+
+
+# ── Projects ──────────────────────────────────────────────────────────────────
 
 @router.get("/projects", response_model=List[ProjectOut])
 async def read_projects(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
     return await project_service.get_projects(db)
 
 
-async def verify_intern_subtask_access(db: AsyncSession, user: User, subtask_id: UUID) -> Subtask:
-    subtask = await subtask_service.get_subtask_by_id(db, subtask_id)
-    if user not in subtask.assignees:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not assigned to this subtask")
-    return subtask
+# ── Tasks ─────────────────────────────────────────────────────────────────────
 
+@router.get("/tasks", response_model=List[TaskOut])
+async def read_my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    return await task_service.get_tasks_assigned_to(db, current_user.id)
 
-@router.get("/subtasks", response_model=List[SubtaskOut])
-async def read_my_subtasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
-    result = await db.execute(
-        select(Subtask)
-        .filter(Subtask.assignees.any(id=current_user.id))
-        .options(
-            selectinload(Subtask.assignees),
-            selectinload(Subtask.submissions).selectinload(TaskSubmission.submitter),
-            selectinload(Subtask.task),
-        )
-    )
-    return result.scalars().all()
+@router.patch("/tasks/{id}/status", response_model=TaskOut)
+async def update_task_status(id: UUID, status_in: TaskStatusUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    await _verify_intern_task_access(db, current_user, id)
+    return await task_service.update_task_status(db, id, status_in)
 
-
-@router.get("/subtasks/{id}", response_model=SubtaskOut)
-async def read_subtask(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
-    return await verify_intern_subtask_access(db, current_user, id)
-
-
-@router.patch("/subtasks/{id}/status", response_model=SubtaskOut)
-async def update_status(id: UUID, status_in: SubtaskStatusUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
-    await verify_intern_subtask_access(db, current_user, id)
-    return await subtask_service.update_subtask_status(db, id, status_in)
-
-
-@router.post("/subtasks/{id}/submit", response_model=TaskSubmissionOut)
+@router.post("/tasks/{id}/submit", response_model=TaskSubmissionOut)
 async def submit_work(id: UUID, submit_in: TaskSubmissionCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
-    await verify_intern_subtask_access(db, current_user, id)
-    return await subtask_service.submit_subtask_work(db, id, submit_in, current_user.id)
+    await _verify_intern_task_access(db, current_user, id)
+    return await task_service.submit_task_work(db, id, submit_in, current_user.id)
+
+
+# ── Proposals ─────────────────────────────────────────────────────────────────
+
+@router.post("/epics/{id}/proposals", response_model=ProposalOut)
+async def create_proposal(id: UUID, proposal_in: ProposalCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    return await proposal_service.create_proposal(db, id, proposal_in, current_user.id)
+
+
+# ── Mind map notes ────────────────────────────────────────────────────────────
+
+@router.patch("/tasks/{id}/mind-map-note", response_model=TaskMindMapNoteOut)
+async def update_task_note(id: UUID, note_in: TaskMindMapNoteUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    await _verify_intern_task_access(db, current_user, id)
+    return await mind_map_service.update_task_note(db, id, note_in, current_user.id)
+
+@router.get("/tasks/{id}/mind-map-note", response_model=TaskMindMapNoteOut)
+async def get_task_note(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    await _verify_intern_task_access(db, current_user, id)
+    return await mind_map_service.get_or_create_task_note(db, id)
+
+
+# ── Mind map (read-only epic structure + layout) ───────────────────────────────
+
+@router.get("/epics/{id}", response_model=EpicOut)
+async def read_epic(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    return await epic_service.get_epic_by_id(db, id)
+
+@router.get("/epics/{id}/mind-map", response_model=MindMapLayoutOut)
+async def get_mind_map(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_intern)):
+    return await mind_map_service.get_or_create_layout(db, id)

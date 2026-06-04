@@ -6,6 +6,8 @@ import Leaderboard from "./pages/Leaderboard"
 import Login from "./pages/Login"
 import Profile from "./pages/Profile"
 import Admin from "./pages/Admin"
+import Tracker from "./pages/Tracker"
+import MindMap from "./pages/MindMap"
 
 const rootRoute = createRootRoute({ component: Outlet })
 
@@ -56,6 +58,18 @@ const adminRoute = createRoute({
   component: Admin,
 })
 
+const trackerRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/tracker",
+  component: Tracker,
+})
+
+const mindMapRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: "/mind-map/$epicId",
+  component: MindMap,
+})
+
 export const routeTree = rootRoute.addChildren([
   loginRoute,
   layoutRoute.addChildren([
@@ -64,5 +78,7 @@ export const routeTree = rootRoute.addChildren([
     leaderboardRoute,
     profileRoute,
     adminRoute,
+    trackerRoute,
+    mindMapRoute,
   ]),
 ])

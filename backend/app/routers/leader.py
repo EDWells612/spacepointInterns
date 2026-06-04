@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -9,150 +9,183 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.team import Team
 from app.models.task import Task
-from app.models.subtask import Subtask
+from app.models.module import Module
+from app.models.epic import Epic
 from app.core.dependencies import require_leader
-from app.schemas.task import TaskOut, TaskSubmit, TaskUpdate
-from app.schemas.subtask import SubtaskCreate, SubtaskOut, SubtaskUpdate, SubtaskAssign
+from app.schemas.user import UserOut
+from app.schemas.epic import EpicOut, EpicUpdate
+from app.schemas.module import ModuleCreate, ModuleOut, ModuleUpdate
+from app.services import module as module_service
+from app.schemas.task import TaskCreate, TaskOut, TaskUpdate, TaskAssign
 from app.schemas.submission import TaskSubmissionOut, TaskSubmissionReview
+from app.schemas.proposal import ProposalOut, ProposalReview
+from app.schemas.mind_map import MindMapLayoutOut, MindMapLayoutUpdate, TaskMindMapNoteOut
 from app.schemas.project import ProjectOut
 
+from app.services import epic as epic_service
 from app.services import task as task_service
-from app.services import subtask as subtask_service
+from app.services import proposal as proposal_service
+from app.services import mind_map as mind_map_service
 from app.services import project as project_service
-from app.models.submission import TaskSubmission
 
 router = APIRouter(prefix="/leader", tags=["leader"])
 
 
-async def verify_leader_task_access(db: AsyncSession, user: User, task_id: UUID) -> Task:
+async def _get_leader_team(db: AsyncSession, user: User) -> Team:
+    result = await db.execute(select(Team).where(Team.leader_id == user.id))
+    team = result.scalars().first()
+    if not team:
+        raise HTTPException(status_code=404, detail="No team found for this leader")
+    return team
+
+
+async def _verify_epic_access(db: AsyncSession, user: User, epic_id: UUID) -> Epic:
+    epic = await epic_service.get_epic_by_id(db, epic_id)
+    team = await _get_leader_team(db, user)
+    if epic.team_id != team.id:
+        raise HTTPException(status_code=403, detail="Not authorized for this epic")
+    return epic
+
+
+async def _verify_task_access(db: AsyncSession, user: User, task_id: UUID) -> Task:
     task = await task_service.get_task_by_id(db, task_id)
-    team = await db.execute(select(Team).where(Team.id == task.team_id))
-    team = team.scalars().first()
-    if not team or team.leader_id != user.id:
-        if user.role.value != "admin":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to access this task")
+    team = await _get_leader_team(db, user)
+    module_result = await db.execute(select(Module).where(Module.id == task.module_id))
+    module = module_result.scalars().first()
+    if not module:
+        raise HTTPException(status_code=404, detail="Module not found")
+    epic_result = await db.execute(select(Epic).where(Epic.id == module.epic_id))
+    epic = epic_result.scalars().first()
+    if not epic or epic.team_id != team.id:
+        raise HTTPException(status_code=403, detail="Not authorized for this task")
     return task
 
 
-async def verify_leader_subtask_access(db: AsyncSession, user: User, subtask_id: UUID) -> Subtask:
-    subtask = await subtask_service.get_subtask_by_id(db, subtask_id)
-    await verify_leader_task_access(db, user, subtask.task_id)
-    return subtask
-
-
-# --- Projects ---
+# ── Projects ──────────────────────────────────────────────────────────────────
 
 @router.get("/projects", response_model=List[ProjectOut])
 async def read_projects(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
     return await project_service.get_projects(db)
 
 
-# --- Tasks ---
+# ── Team ───────────────────────────────────────────────────────────────────────
+
+@router.get("/team/members", response_model=List[UserOut])
+async def read_team_members(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    team = await _get_leader_team(db, current_user)
+    result = await db.execute(
+        select(Team).where(Team.id == team.id).options(selectinload(Team.members))
+    )
+    team_with_members = result.scalars().first()
+    return team_with_members.members
+
+
+# ── Epics ─────────────────────────────────────────────────────────────────────
+
+@router.get("/epics", response_model=List[EpicOut])
+async def read_my_epics(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    team = await _get_leader_team(db, current_user)
+    return await epic_service.get_epics_by_team(db, team.id)
+
+@router.get("/epics/{id}", response_model=EpicOut)
+async def read_epic(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await epic_service.get_epic_by_id(db, id)
+
+@router.patch("/epics/{id}", response_model=EpicOut)
+async def update_epic(id: UUID, epic_in: EpicUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    await _verify_epic_access(db, current_user, id)
+    return await epic_service.update_epic(db, id, epic_in)
+
+
+# ── Modules ───────────────────────────────────────────────────────────────────
+
+@router.post("/epics/{id}/modules", response_model=ModuleOut)
+async def create_module(id: UUID, module_in: ModuleCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    await _verify_epic_access(db, current_user, id)
+    return await module_service.create_module(db, id, module_in, current_user.id)
+
+@router.patch("/modules/{id}", response_model=ModuleOut)
+async def update_module(id: UUID, module_in: ModuleUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    module = await module_service.get_module_by_id(db, id)
+    await _verify_epic_access(db, current_user, module.epic_id)
+    return await module_service.update_module(db, id, module_in)
+
+@router.delete("/modules/{id}")
+async def delete_module(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    module = await module_service.get_module_by_id(db, id)
+    await _verify_epic_access(db, current_user, module.epic_id)
+    return await module_service.delete_module(db, id)
+
+
+# ── Tasks ─────────────────────────────────────────────────────────────────────
 
 @router.get("/tasks", response_model=List[TaskOut])
-async def read_my_team_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    team_result = await db.execute(select(Team).where(Team.leader_id == current_user.id))
-    team = team_result.scalars().first()
-    if not team:
-        return []
+async def read_my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    team = await _get_leader_team(db, current_user)
     return await task_service.get_tasks_by_team(db, team.id)
 
-
-@router.get("/tasks/{id}", response_model=TaskOut)
-async def read_task(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    return await verify_leader_task_access(db, current_user, id)
-
+@router.post("/modules/{id}/tasks", response_model=TaskOut)
+async def create_task(id: UUID, task_in: TaskCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await task_service.create_task(db, id, task_in, current_user.id)
 
 @router.patch("/tasks/{id}", response_model=TaskOut)
-async def update_task_status(id: UUID, task_in: TaskUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    await verify_leader_task_access(db, current_user, id)
+async def update_task(id: UUID, task_in: TaskUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    await _verify_task_access(db, current_user, id)
     return await task_service.update_task(db, id, task_in)
 
+@router.delete("/tasks/{id}")
+async def delete_task(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    await _verify_task_access(db, current_user, id)
+    return await task_service.delete_task(db, id)
 
-@router.patch("/tasks/{id}/submit", response_model=TaskOut)
-async def submit_task_to_admin(id: UUID, submit_in: TaskSubmit, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    await verify_leader_task_access(db, current_user, id)
-    return await task_service.submit_task(db, id, submit_in)
-
-
-# --- All subtasks for leader's team (for kanban) ---
-
-@router.get("/subtasks", response_model=List[SubtaskOut])
-async def read_all_team_subtasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    team_result = await db.execute(select(Team).where(Team.leader_id == current_user.id))
-    team = team_result.scalars().first()
-    if not team:
-        return []
-    query = (
-        select(Subtask)
-        .join(Task, Subtask.task_id == Task.id)
-        .where(Task.team_id == team.id)
-        .options(
-            selectinload(Subtask.assignees),
-            selectinload(Subtask.submissions).selectinload(TaskSubmission.submitter),
-            selectinload(Subtask.task),
-        )
-    )
-    result = await db.execute(query)
-    return result.scalars().all()
+@router.post("/tasks/{id}/assign", response_model=TaskOut)
+async def assign_task(id: UUID, assign_in: TaskAssign, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    await _verify_task_access(db, current_user, id)
+    return await task_service.assign_task(db, id, assign_in)
 
 
-# --- Subtasks ---
-
-@router.post("/tasks/{id}/subtasks", response_model=SubtaskOut)
-async def create_subtask(id: UUID, subtask_in: SubtaskCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    await verify_leader_task_access(db, current_user, id)
-    return await subtask_service.create_subtask(db, id, subtask_in, current_user.id)
-
-
-@router.get("/tasks/{id}/subtasks", response_model=List[SubtaskOut])
-async def read_subtasks(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    await verify_leader_task_access(db, current_user, id)
-    return await subtask_service.get_subtasks_by_task(db, id)
-
-
-@router.patch("/subtasks/{id}", response_model=SubtaskOut)
-async def update_subtask(id: UUID, subtask_in: SubtaskUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    await verify_leader_subtask_access(db, current_user, id)
-    return await subtask_service.update_subtask(db, id, subtask_in)
-
-
-@router.delete("/subtasks/{id}")
-async def delete_subtask(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    await verify_leader_subtask_access(db, current_user, id)
-    return await subtask_service.delete_subtask(db, id)
-
-
-@router.post("/subtasks/{id}/assign", response_model=SubtaskOut)
-async def assign_interns(id: UUID, assign_in: SubtaskAssign, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    await verify_leader_subtask_access(db, current_user, id)
-    return await subtask_service.assign_subtask(db, id, assign_in)
-
-
-# --- Submissions ---
-
-@router.get("/subtasks/review-queue", response_model=List[TaskSubmissionOut])
-async def read_review_queue(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    team_result = await db.execute(select(Team).where(Team.leader_id == current_user.id))
-    team = team_result.scalars().first()
-    if not team:
-        return []
-    query = (
-        select(TaskSubmission)
-        .join(Subtask, TaskSubmission.subtask_id == Subtask.id)
-        .join(Task, Subtask.task_id == Task.id)
-        .where(Task.team_id == team.id)
-        .where(TaskSubmission.status == "submitted")
-    )
-    result = await db.execute(query)
-    return result.scalars().all()
-
+# ── Submissions ───────────────────────────────────────────────────────────────
 
 @router.patch("/submissions/{id}/review", response_model=TaskSubmissionOut)
-async def review_intern_submission(id: UUID, review_in: TaskSubmissionReview, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
-    submission_result = await db.execute(select(TaskSubmission).where(TaskSubmission.id == id))
-    submission = submission_result.scalars().first()
-    if not submission:
-        raise HTTPException(status_code=404, detail="Submission not found")
-    await verify_leader_subtask_access(db, current_user, submission.subtask_id)
-    return await subtask_service.review_submission(db, id, review_in)
+async def review_submission(id: UUID, review_in: TaskSubmissionReview, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await task_service.review_submission(db, id, review_in)
+
+
+# ── Proposals ─────────────────────────────────────────────────────────────────
+
+@router.get("/proposals", response_model=List[ProposalOut])
+async def read_all_proposals(db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    """All proposals across the leader's team epics."""
+    team = await _get_leader_team(db, current_user)
+    return await proposal_service.get_proposals_by_team(db, team.id)
+
+@router.get("/epics/{id}/proposals", response_model=List[ProposalOut])
+async def read_proposals(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await proposal_service.get_proposals_by_epic(db, id)
+
+@router.patch("/proposals/{id}", response_model=ProposalOut)
+async def review_proposal(id: UUID, review_in: ProposalReview, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await proposal_service.review_proposal(db, id, review_in, current_user.id)
+
+
+# ── Mind map ──────────────────────────────────────────────────────────────────
+
+@router.get("/epics/{id}/mind-map", response_model=MindMapLayoutOut)
+async def get_mind_map(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await mind_map_service.get_or_create_layout(db, id)
+
+@router.patch("/epics/{id}/mind-map", response_model=MindMapLayoutOut)
+async def update_mind_map(id: UUID, layout_in: MindMapLayoutUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await mind_map_service.update_layout(db, id, layout_in)
+
+@router.get("/tasks/{id}/mind-map-note", response_model=TaskMindMapNoteOut)
+async def get_task_note(id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    return await mind_map_service.get_or_create_task_note(db, id)
+
+
+# ── Tracker ───────────────────────────────────────────────────────────────────
+
+@router.get("/tracker/{user_id}", response_model=List[TaskOut])
+async def get_user_tracker(user_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    """All tasks assigned to a specific intern — used by leader to view their team member's tracker."""
+    return await task_service.get_tasks_assigned_to(db, user_id)

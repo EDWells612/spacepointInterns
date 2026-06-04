@@ -10,6 +10,7 @@ import logoImg from "@/assets/logo.svg"
 
 const baseLinks = [
   { label: "Dashboard",   to: "/" },
+  { label: "Tracker",     to: "/tracker" },
   { label: "Calendar",    to: "/calendar" },
   { label: "Leaderboard", to: "/leaderboard" },
 ]

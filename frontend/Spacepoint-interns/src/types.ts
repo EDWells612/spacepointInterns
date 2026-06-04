@@ -29,26 +29,42 @@ export interface Project {
   created_at: string
 }
 
-export interface Task {
+// ── Task hierarchy ────────────────────────────────────────────────────────────
+
+export interface TaskBrief {
+  id: string
+  title: string
+  status: WorkStatus
+  due_date: string | null
+  expected_time: number | null
+  actual_time: number | null
+  assignee_count: number
+}
+
+export interface Module {
+  id: string
+  epic_id: string
+  title: string
+  description: string | null
+  created_at: string
+  tasks: TaskBrief[]
+}
+
+export interface Epic {
   id: string
   project_id: string
   team_id: string
   title: string
   description: string | null
-  due_date: string | null
   status: WorkStatus
   created_by: string | null
-  submission_link: string | null
-  submission_note: string | null
-  submitted_at: string | null
-  reviewed_at: string | null
-  review_comment: string | null
   created_at: string
+  modules: Module[]
 }
 
 export interface Submission {
   id: string
-  subtask_id: string
+  task_id: string
   submitted_by: string
   submitter_name: string | null
   link: string
@@ -60,19 +76,40 @@ export interface Submission {
   reviewed_at: string | null
 }
 
-export interface Subtask {
+/** Intern-level work item — belongs to a Module → Epic → Project */
+export interface Task {
   id: string
-  task_id: string
-  task_title: string | null
-  project_id: string | null
-  created_by: string | null
+  module_id: string
   title: string
   description: string | null
-  due_date: string | null
   status: WorkStatus
+  due_date: string | null
+  expected_time: number | null
+  actual_time: number | null
+  created_by: string | null
   created_at: string
   assignees: User[]
   submissions: Submission[]
+  // derived by backend from module → epic chain
+  module_title: string | null
+  module_description: string | null
+  epic_id: string | null
+  epic_title: string | null
+  epic_description: string | null
+  project_id: string | null
+}
+
+export interface Proposal {
+  id: string
+  epic_id: string
+  proposed_by: string
+  proposer_name: string | null
+  title: string
+  description: string | null
+  status: "pending" | "accepted" | "rejected"
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
 }
 
 export interface Notification {
@@ -84,18 +121,21 @@ export interface Notification {
   created_at: string
 }
 
-/** Unified card shown on the kanban board — wraps either a Task or a Subtask */
+/** Unified card shown on the kanban board */
 export interface BoardCard {
   id: string
-  kind: "task" | "subtask"
   title: string
-  /** For subtasks: the parent task name */
-  task_title: string | null
-  /** Project name (resolved on the client) */
+  epic_id: string | null
+  epic_title: string | null
+  epic_description: string | null
+  module_title: string | null
+  module_description: string | null
   project_title: string | null
   status: WorkStatus
   due_date: string | null
   description: string | null
+  expected_time: number | null
+  actual_time: number | null
   assignees: User[]
   submissions: Submission[]
 }
