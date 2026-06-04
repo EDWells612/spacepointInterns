@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useParams, useNavigate } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -8,7 +9,7 @@ import {
   type Node, type Edge,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
 import type { Epic, WorkStatus } from "@/types"
@@ -39,10 +40,15 @@ function ProjectNode({ data }: NodeProps) {
 
 function EpicNode({ data }: NodeProps) {
   return (
-    <div className="bg-[#643f83] text-white rounded-2xl px-6 py-4 min-w-[200px] text-center shadow-xl select-none">
+    <div className="bg-[#643f83] text-white rounded-2xl px-6 py-4 min-w-[200px] max-w-[260px] text-center shadow-xl select-none">
       <p className="text-[9px] font-bold uppercase tracking-widest text-[#d6c7e1] mb-1">Epic</p>
       <p className="text-sm font-bold leading-snug">{String(data.label)}</p>
-      <div className="flex items-center justify-center gap-1.5 mt-1.5">
+      {!!data.description && (
+        <p className="text-[10px] text-[#d6c7e1] mt-1.5 leading-relaxed line-clamp-2 opacity-80">
+          {String(data.description)}
+        </p>
+      )}
+      <div className="flex items-center justify-center gap-1.5 mt-2">
         <span className={cn("w-1.5 h-1.5 rounded-full", STATUS[data.status as WorkStatus]?.dot ?? "bg-gray-300")} />
         <span className="text-[10px] text-[#d6c7e1]">{String(data.status).replace("_", " ")}</span>
       </div>
@@ -57,6 +63,11 @@ function ModuleNode({ data }: NodeProps) {
     <div className="bg-white border-2 border-[#643f83] rounded-xl px-4 py-3 min-w-[160px] max-w-[220px] shadow-md select-none">
       <p className="text-[8px] font-bold uppercase tracking-widest text-[#643f83] mb-1 text-center">Module</p>
       <p className="text-xs font-bold text-black text-center leading-snug">{String(data.label)}</p>
+      {!!data.description && (
+        <p className="text-[10px] text-gray-500 mt-1.5 leading-relaxed line-clamp-2 text-center">
+          {String(data.description)}
+        </p>
+      )}
       <Handle type="target" position={Position.Top}    style={{ background: "#643f83", width: 7, height: 7 }} />
       <Handle type="source" position={Position.Bottom} style={{ background: "#643f83", width: 7, height: 7 }} />
     </div>
@@ -70,10 +81,117 @@ function TaskNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Top} style={{ background: "#d6c7e1", width: 7, height: 7 }} />
       <p className="text-[8px] font-bold uppercase tracking-widest text-gray-400 mb-1">Task</p>
       <p className="text-xs font-semibold text-black leading-snug mb-1.5">{String(data.label)}</p>
-      <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full", s.badge)}>
-        {String(data.status).replace("_", " ")}
-      </span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full", s.badge)}>
+          {String(data.status).replace("_", " ")}
+        </span>
+        {Number(data.assigneeCount) > 0 && (
+          <span className="text-[9px] text-gray-400">
+            {Number(data.assigneeCount)} intern{Number(data.assigneeCount) !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
     </div>
+  )
+}
+
+// ── Node detail dialog ────────────────────────────────────────────────────────
+
+interface NodeDetail {
+  type: "project" | "epic" | "module" | "task"
+  label: string
+  description?: string | null
+  status?: string
+  epicCount?: number
+  taskCount?: number
+  assigneeCount?: number
+}
+
+function NodeDetailDialog({ detail, onClose }: { detail: NodeDetail; onClose: () => void }) {
+  const typeLabel: Record<NodeDetail["type"], string> = {
+    project: "Project",
+    epic:    "Epic",
+    module:  "Module",
+    task:    "Task",
+  }
+  const typeBadge: Record<NodeDetail["type"], string> = {
+    project: "text-white  bg-black",
+    epic:    "text-white  bg-[#643f83]",
+    module:  "text-[#643f83] bg-[#d6c7e1]",
+    task:    "text-gray-500  bg-gray-100",
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm bg-white rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* header */}
+        <div className="flex items-start gap-3 px-5 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <span className={cn("text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full", typeBadge[detail.type])}>
+              {typeLabel[detail.type]}
+            </span>
+            <p className="text-base font-semibold text-black mt-1.5 leading-snug">{detail.label}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* body */}
+        <div className="overflow-y-auto flex-1 px-5 py-4 flex flex-col gap-4">
+
+          {/* status badge */}
+          {detail.status && (
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-xs font-semibold px-2.5 py-1 rounded-full",
+                STATUS[detail.status as WorkStatus]?.badge ?? "bg-gray-100 text-gray-500"
+              )}>
+                {detail.status.replace("_", " ")}
+              </span>
+            </div>
+          )}
+
+          {/* project stats */}
+          {detail.type === "project" && (
+            <div className="flex gap-4 text-sm">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Epics</span>
+                <span className="text-xl font-bold text-black">{detail.epicCount ?? 0}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Tasks</span>
+                <span className="text-xl font-bold text-black">{detail.taskCount ?? 0}</span>
+              </div>
+            </div>
+          )}
+
+          {/* task assignees */}
+          {detail.type === "task" && (detail.assigneeCount ?? 0) > 0 && (
+            <p className="text-sm text-gray-500">
+              <span className="font-semibold text-black">{detail.assigneeCount}</span> intern{detail.assigneeCount !== 1 ? "s" : ""} assigned
+            </p>
+          )}
+
+          {/* description */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Description</p>
+            {detail.description ? (
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{detail.description}</p>
+            ) : (
+              <p className="text-sm text-gray-300 italic">No description added</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -93,6 +211,7 @@ const ROW_TASK = 190
 function buildProjectGraph(
   projectId: string,
   projectTitle: string,
+  projectDescription: string | null,
   epics: Epic[],
   saved: Record<string, { x: number; y: number }>
 ): { nodes: Node[]; edges: Edge[] } {
@@ -122,7 +241,7 @@ function buildProjectGraph(
     id: `project-${projectId}`,
     type: "projectNode",
     position: saved[`project-${projectId}`] ?? { x: totalWidth / 2 - 130, y: 0 },
-    data: { label: projectTitle, epicCount: epics.length, taskCount: totalTasks },
+    data: { label: projectTitle, description: projectDescription, epicCount: epics.length, taskCount: totalTasks },
   })
 
   let epicX = 0
@@ -133,7 +252,7 @@ function buildProjectGraph(
       id: `epic-${epic.id}`,
       type: "epicNode",
       position: saved[`epic-${epic.id}`] ?? { x: epicCx, y: ROW_EPIC },
-      data: { label: epic.title, status: epic.status },
+      data: { label: epic.title, status: epic.status, description: epic.description ?? null },
     })
     edges.push({
       id: `e-proj-${epic.id}`,
@@ -153,7 +272,7 @@ function buildProjectGraph(
         id: `module-${mod.id}`,
         type: "moduleNode",
         position: saved[`module-${mod.id}`] ?? { x: modCx, y: ROW_EPIC + ROW_MOD },
-        data: { label: mod.title },
+        data: { label: mod.title, description: mod.description ?? null },
       })
       edges.push({
         id: `e-epic-mod-${mod.id}`,
@@ -173,7 +292,7 @@ function buildProjectGraph(
           id: `task-${task.id}`,
           type: "taskNode",
           position: saved[`task-${task.id}`] ?? { x: taskX, y: ROW_EPIC + ROW_MOD + ROW_TASK },
-          data: { label: task.title, status: task.status },
+          data: { label: task.title, status: task.status, assigneeCount: task.assignee_count },
         })
         edges.push({
           id: `e-mod-task-${task.id}`,
@@ -206,6 +325,7 @@ export default function ProjectMindMap() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [initialised, setInitialised]    = useState(false)
+  const [selectedNode, setSelectedNode]  = useState<NodeDetail | null>(null)
 
   const { data: project } = useQuery({
     queryKey: ["project", projectId],
@@ -220,11 +340,23 @@ export default function ProjectMindMap() {
 
   if (project && !isLoading && !initialised) {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")
-    const { nodes: n, edges: e } = buildProjectGraph(projectId, project.title, epics, saved)
+    const { nodes: n, edges: e } = buildProjectGraph(projectId, project.title, project.description, epics, saved)
     setNodes(n)
     setEdges(e)
     setInitialised(true)
   }
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (node.type === "projectNode") {
+      setSelectedNode({ type: "project", label: String(node.data.label), description: node.data.description as string ?? null, epicCount: Number(node.data.epicCount), taskCount: Number(node.data.taskCount) })
+    } else if (node.type === "epicNode") {
+      setSelectedNode({ type: "epic", label: String(node.data.label), description: node.data.description as string ?? null, status: String(node.data.status) })
+    } else if (node.type === "moduleNode") {
+      setSelectedNode({ type: "module", label: String(node.data.label), description: node.data.description as string ?? null })
+    } else if (node.type === "taskNode") {
+      setSelectedNode({ type: "task", label: String(node.data.label), status: String(node.data.status), assigneeCount: Number(node.data.assigneeCount), description: node.data.description as string ?? null })
+    }
+  }, [])
 
   const saveLayout = useCallback(() => {
     if (!canEdit) return
@@ -282,6 +414,7 @@ export default function ProjectMindMap() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeDragStop={saveLayout}
+          onNodeClick={onNodeClick}
           nodesDraggable={canEdit}
           fitView
           fitViewOptions={{ padding: 0.12 }}
@@ -299,6 +432,10 @@ export default function ProjectMindMap() {
           />
         </ReactFlow>
       </div>
+
+      {selectedNode && (
+        <NodeDetailDialog detail={selectedNode} onClose={() => setSelectedNode(null)} />
+      )}
     </div>
   )
 }
