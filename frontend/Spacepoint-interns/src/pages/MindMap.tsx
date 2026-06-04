@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   ReactFlow, Background, Controls, MiniMap,
   useNodesState, useEdgesState,
-  Handle, Position, type NodeProps,
   type Node, type Edge,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
