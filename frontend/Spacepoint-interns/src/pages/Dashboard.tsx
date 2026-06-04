@@ -549,7 +549,7 @@ function ProjectTasksPanel({ project, tasks, onTaskClick, onClose, onTaskCreated
     : []
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
 
         {/* ── Header ─────────────────────────────────────────────────── */}
@@ -624,15 +624,22 @@ function ProjectTasksPanel({ project, tasks, onTaskClick, onClose, onTaskCreated
             </div>
           ) : (
             /* Screen 1 header — epics list */
-            <>
-              <div className="min-w-0">
-                <p className="text-base font-semibold text-black break-words">{project.title}</p>
-                {project.description && (
-                  <p className="text-xs text-gray-400 mt-0.5 break-words line-clamp-2 sm:line-clamp-none">{project.description}</p>
-                )}
-                <p className="text-xs text-gray-400 mt-0.5">{epics.length} epic{epics.length !== 1 ? "s" : ""} · {tasks.length} task{tasks.length !== 1 ? "s" : ""}</p>
+            <div className="w-full flex flex-col gap-3">
+              {/* Row 1: title + close */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-black break-words">{project.title}</p>
+                  {project.description && (
+                    <p className="text-xs text-gray-400 mt-0.5 break-words line-clamp-2">{project.description}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-0.5">{epics.length} epic{epics.length !== 1 ? "s" : ""} · {tasks.length} task{tasks.length !== 1 ? "s" : ""}</p>
+                </div>
+                <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors flex-shrink-0">
+                  <X size={16} />
+                </button>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+              {/* Row 2: actions */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={onToggleStatus}
                   className={cn(
@@ -652,14 +659,11 @@ function ProjectTasksPanel({ project, tasks, onTaskClick, onClose, onTaskCreated
                   <Plus size={12} /> Add epic
                 </button>
                 <button onClick={onDelete}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete project">
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors ml-auto" title="Delete project">
                   <Trash2 size={15} />
                 </button>
-                <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors">
-                  <X size={16} />
-                </button>
               </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -1453,7 +1457,7 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
   })
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
         <div className="flex items-center justify-between">
           <p className="text-base font-semibold text-black">New project</p>
