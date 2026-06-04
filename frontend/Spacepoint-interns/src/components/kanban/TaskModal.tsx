@@ -1,15 +1,17 @@
 import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ExternalLink, Clock, Trash2, Network, ChevronDown, ChevronUp } from "lucide-react"
+import { ExternalLink, Clock, Trash2, Network, ChevronDown, ChevronUp, Pencil, Plus, X as XIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { BoardCard, User } from "@/types"
 import { useAuth } from "@/context/AuthContext"
 import {
   updateLeaderTaskApi, deleteLeaderTaskApi, leaderReviewSubmissionApi,
   updateInternTaskStatusApi, submitTaskWorkApi,
+  assignLeaderTaskApi, unassignLeaderTaskApi,
 } from "@/api/tasks"
+import { getLeaderTeamMembersApi } from "@/api/teams"
 
 interface Props {
   card: BoardCard | null
@@ -52,7 +54,7 @@ export default function TaskModal({ card, open, onClose, tasksKey }: Props) {
   const isIntern  = currentUser?.role === "intern"
   const isLeader  = currentUser?.role === "leader"
 
-  const [view,           setView]           = useState<"detail" | "submit" | "review">("detail")
+  const [view,           setView]           = useState<"detail" | "edit" | "submit" | "review">("detail")
   const [scopeOpen,      setScopeOpen]      = useState(false)
   const [submitLink,     setSubmitLink]     = useState("")
   const [submitNote,     setSubmitNote]     = useState("")
@@ -61,11 +63,25 @@ export default function TaskModal({ card, open, onClose, tasksKey }: Props) {
   const [reviewComment,  setReviewComment]  = useState("")
   const [selectedSubId,  setSelectedSubId]  = useState<string | null>(null)
 
+  // edit fields
+  const [editTitle,    setEditTitle]    = useState("")
+  const [editDesc,     setEditDesc]     = useState("")
+  const [editDue,      setEditDue]      = useState("")
+  const [editExpected, setEditExpected] = useState("")
+
   const resetClose = () => {
     setView("detail")
     setSubmitLink(""); setSubmitNote(""); setActualTime("")
     setReviewScore(""); setReviewComment(""); setSelectedSubId(null)
     onClose()
+  }
+
+  const openEdit = () => {
+    setEditTitle(card?.title ?? "")
+    setEditDesc(card?.description ?? "")
+    setEditDue(card?.due_date ? card.due_date.split("T")[0] : "")
+    setEditExpected(card?.expected_time != null ? String(card.expected_time) : "")
+    setView("edit")
   }
 
   const startMutation = useMutation({
@@ -100,6 +116,33 @@ export default function TaskModal({ card, open, onClose, tasksKey }: Props) {
   const deleteMutation = useMutation({
     mutationFn: () => deleteLeaderTaskApi(card!.id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: tasksKey }); resetClose() },
+  })
+
+  const editMutation = useMutation({
+    mutationFn: () => updateLeaderTaskApi(card!.id, {
+      title:         editTitle.trim() || undefined,
+      description:   editDesc.trim()  || undefined,
+      due_date:      editDue           ? new Date(editDue).toISOString() : undefined,
+      expected_time: editExpected      ? Number(editExpected) : undefined,
+    }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: tasksKey }); setView("detail") },
+  })
+
+  const assignMutation = useMutation({
+    mutationFn: (userId: string) => assignLeaderTaskApi(card!.id, [userId]),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tasksKey }),
+  })
+
+  const unassignMutation = useMutation({
+    mutationFn: (userId: string) => unassignLeaderTaskApi(card!.id, userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tasksKey }),
+  })
+
+  // team members for assign picker
+  const { data: teamMembers = [] } = useQuery<User[]>({
+    queryKey: ["leader", "team", "members"],
+    queryFn: getLeaderTeamMembersApi,
+    enabled: isLeader && view === "edit",
   })
 
   if (!card) return null
@@ -139,6 +182,12 @@ export default function TaskModal({ card, open, onClose, tasksKey }: Props) {
                     title="View epic mind map"
                   >
                     <Network size={14} />
+                  </button>
+                )}
+                {isLeader && view === "detail" && (
+                  <button onClick={openEdit}
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors">
+                    <Pencil size={14} />
                   </button>
                 )}
                 {isLeader && (
@@ -318,6 +367,97 @@ export default function TaskModal({ card, open, onClose, tasksKey }: Props) {
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Edit view (leader only) ──────────────────────────────── */}
+          {view === "edit" && (
+            <div className="mt-4 flex flex-col gap-4">
+              {/* title */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Title</label>
+                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-black transition-colors" />
+              </div>
+              {/* description */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Description</label>
+                <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)}
+                  rows={3} placeholder="Optional"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:border-black transition-colors" />
+              </div>
+              {/* due date + expected time */}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Deadline</label>
+                  <input type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)}
+                    className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-black transition-colors" />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Expected (h)</label>
+                  <input type="number" min="0" step="0.5" value={editExpected} onChange={(e) => setEditExpected(e.target.value)}
+                    placeholder="e.g. 3"
+                    className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-black transition-colors" />
+                </div>
+              </div>
+
+              {/* assignees */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">Assignees</p>
+                {/* current */}
+                {card.assignees.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mb-3">
+                    {card.assignees.map((u) => (
+                      <div key={u.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-[#d6c7e1] text-[#643f83] text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                            {u.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                          </div>
+                          <span className="text-sm font-medium text-black">{u.full_name}</span>
+                        </div>
+                        <button onClick={() => unassignMutation.mutate(u.id)}
+                          disabled={unassignMutation.isPending}
+                          className="p-1 rounded-lg text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
+                          <XIcon size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* add from team */}
+                {teamMembers.filter((m) => !card.assignees.find((a) => a.id === m.id)).length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Add from team</p>
+                    {teamMembers
+                      .filter((m) => !card.assignees.find((a) => a.id === m.id))
+                      .map((m) => (
+                        <button key={m.id} onClick={() => assignMutation.mutate(m.id)}
+                          disabled={assignMutation.isPending}
+                          className="flex items-center justify-between px-3 py-2 border border-dashed border-gray-200 rounded-xl hover:border-black hover:bg-gray-50 transition-all disabled:opacity-50">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                              {m.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                            </div>
+                            <span className="text-sm text-gray-600">{m.full_name}</span>
+                          </div>
+                          <Plus size={13} className="text-gray-400" />
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setView("detail")}
+                  className="flex-1 h-10 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={() => editMutation.mutate()}
+                  disabled={!editTitle.trim() || editMutation.isPending}
+                  className="flex-1 h-10 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-50">
+                  {editMutation.isPending ? "Saving…" : "Save changes"}
+                </button>
               </div>
             </div>
           )}

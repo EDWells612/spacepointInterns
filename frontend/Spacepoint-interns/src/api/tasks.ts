@@ -48,6 +48,9 @@ export const deleteLeaderTaskApi = (taskId: string) =>
 export const assignLeaderTaskApi = (taskId: string, userIds: string[]) =>
   api.post<Task>(`/leader/tasks/${taskId}/assign`, { user_ids: userIds }).then((r) => r.data)
 
+export const unassignLeaderTaskApi = (taskId: string, userId: string) =>
+  api.delete<Task>(`/leader/tasks/${taskId}/assign/${userId}`).then((r) => r.data)
+
 export const leaderReviewSubmissionApi = (
   submissionId: string,
   data: { score: number; review_comment: string }

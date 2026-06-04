@@ -151,6 +151,11 @@ async def assign_task(id: UUID, assign_in: TaskAssign, db: AsyncSession = Depend
     await _verify_task_access(db, current_user, id)
     return await task_service.assign_task(db, id, assign_in)
 
+@router.delete("/tasks/{id}/assign/{user_id}", response_model=TaskOut)
+async def unassign_task(id: UUID, user_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_leader)):
+    await _verify_task_access(db, current_user, id)
+    return await task_service.unassign_task(db, id, user_id)
+
 
 # ── Submissions ───────────────────────────────────────────────────────────────
 

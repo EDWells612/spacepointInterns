@@ -1,9 +1,11 @@
 import { useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
-import { X, Eye } from "lucide-react"
-import type { Epic, Module } from "@/types"
+import { X, Eye, Pencil, Check } from "lucide-react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import type { Epic, Module, WorkStatus } from "@/types"
 import ModuleDetailDialog from "@/components/ModuleDetailDialog"
+import { updateLeaderEpicApi } from "@/api/epics"
 
 const STATUS_LABEL: Record<string, string> = {
   todo: "To do",
@@ -25,7 +27,31 @@ interface Props {
 }
 
 export default function EpicDetailModal({ epic, projectName, open, onClose }: Props) {
-  const [viewModule, setViewModule] = useState<Module | null>(null)
+  const queryClient = useQueryClient()
+  const [viewModule,  setViewModule]  = useState<Module | null>(null)
+  const [editing,     setEditing]     = useState(false)
+  const [editTitle,   setEditTitle]   = useState("")
+  const [editDesc,    setEditDesc]    = useState("")
+  const [editStatus,  setEditStatus]  = useState<WorkStatus>("todo")
+
+  const openEdit = () => {
+    setEditTitle(epic!.title)
+    setEditDesc(epic!.description ?? "")
+    setEditStatus(epic!.status as WorkStatus)
+    setEditing(true)
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: () => updateLeaderEpicApi(epic!.id, {
+      title:       editTitle.trim() || undefined,
+      description: editDesc.trim()  || undefined,
+      status:      editStatus,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["epics", "leader"] })
+      setEditing(false)
+    },
+  })
 
   if (!epic || !open) return null
 
@@ -63,6 +89,11 @@ export default function EpicDetailModal({ epic, projectName, open, onClose }: Pr
               )}>
                 {STATUS_LABEL[epic.status] ?? epic.status}
               </span>
+              {!editing && (
+                <button onClick={openEdit} className="p-1.5 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors" title="Edit epic">
+                  <Pencil size={14} />
+                </button>
+              )}
               <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-black transition-colors">
                 <X size={15} />
               </button>
@@ -72,7 +103,41 @@ export default function EpicDetailModal({ epic, projectName, open, onClose }: Pr
           {/* body */}
           <div className="overflow-y-auto flex-1 px-6 py-4 flex flex-col gap-4">
 
-            {epic.description ? (
+            {editing ? (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Title</label>
+                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-black transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Description</label>
+                  <textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)}
+                    rows={4} placeholder="Optional"
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:border-black transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                  <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as WorkStatus)}
+                    className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-black transition-colors">
+                    <option value="todo">To do</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditing(false)}
+                    className="flex-1 h-10 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={() => saveMutation.mutate()}
+                    disabled={!editTitle.trim() || saveMutation.isPending}
+                    className="flex-1 h-10 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    <Check size={14} /> {saveMutation.isPending ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            ) : epic.description ? (
               <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{epic.description}</p>
             ) : (
               <p className="text-sm text-gray-300 italic">No description provided.</p>

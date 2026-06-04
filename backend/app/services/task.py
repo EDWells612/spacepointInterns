@@ -118,6 +118,13 @@ async def assign_task(db: AsyncSession, task_id: UUID, assign_in: TaskAssign) ->
     return await get_task_by_id(db, task_id)
 
 
+async def unassign_task(db: AsyncSession, task_id: UUID, user_id: UUID) -> Task:
+    task = await get_task_by_id(db, task_id)
+    task.assignees = [u for u in task.assignees if str(u.id) != str(user_id)]
+    await db.commit()
+    return await get_task_by_id(db, task_id)
+
+
 async def submit_task_work(
     db: AsyncSession, task_id: UUID, submit_in: TaskSubmissionCreate, user_id: UUID
 ) -> TaskSubmission:
