@@ -27,6 +27,8 @@ export function ProjectNode({ data }: NodeProps) {
 
 // ── Epic node ─────────────────────────────────────────────────────────────────
 export function EpicNode({ data }: NodeProps) {
+  const teamName   = (data.team_name   as string | null) ?? null
+  const leaderName = (data.leader_name as string | null) ?? null
   return (
     <div className="bg-black text-white rounded-2xl px-8 py-5 min-w-[220px] text-center shadow-2xl select-none cursor-pointer">
       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Epic</p>
@@ -35,18 +37,18 @@ export function EpicNode({ data }: NodeProps) {
         <span className={cn("w-2 h-2 rounded-full", STATUS[data.status as WorkStatus]?.dot ?? "bg-gray-300")} />
         <span className="text-[10px] text-gray-400">{String(data.status).replace("_", " ")}</span>
       </div>
-      {(data.team_name || data.leader_name) && (
+      {(teamName || leaderName) && (
         <div className="mt-2 pt-2 border-t border-gray-700 flex flex-col gap-0.5">
-          {data.team_name && (
+          {teamName && (
             <p className="text-[10px] text-gray-400">
               <span className="text-gray-500 uppercase tracking-widest text-[8px]">Team </span>
-              {String(data.team_name)}
+              {teamName}
             </p>
           )}
-          {data.leader_name && (
+          {leaderName && (
             <p className="text-[10px] text-gray-400">
               <span className="text-gray-500 uppercase tracking-widest text-[8px]">Leader </span>
-              {String(data.leader_name)}
+              {leaderName}
             </p>
           )}
         </div>
