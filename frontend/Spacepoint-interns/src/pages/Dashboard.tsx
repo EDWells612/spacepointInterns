@@ -445,6 +445,7 @@ function ProjectCard({ project, epicCount, onManage }: {
   project: Project; epicCount: number; onManage: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: project.id })
+  const navigate = useNavigate()
   const isDone = (project.status ?? "active") === "completed"
   return (
     <div
@@ -471,7 +472,13 @@ function ProjectCard({ project, epicCount, onManage }: {
         <span className="text-[11px] text-gray-400">
           {epicCount} epic{epicCount !== 1 ? "s" : ""}
         </span>
-        <div onPointerDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3" onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate({ to: "/mind-map/project/$projectId", params: { projectId: project.id } }) }}
+            className="flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-[#643f83] transition-colors"
+          >
+            <Network size={10} /> Map
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onManage() }}
             className="flex items-center gap-1 text-[11px] font-semibold text-[#643f83] hover:text-[#4a2d63] transition-colors"
