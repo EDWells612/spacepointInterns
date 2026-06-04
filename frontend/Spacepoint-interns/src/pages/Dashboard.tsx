@@ -13,7 +13,7 @@ import KanbanBoard from "@/components/kanban/KanbanBoard"
 import EpicDetailModal from "@/components/kanban/EpicDetailModal"
 import ManageModulesModal from "@/components/ManageModulesModal"
 import { useAuth } from "@/context/AuthContext"
-import type { Project, ProjectStatus, Task, Team, WorkStatus, Epic, Module, Proposal } from "@/types"
+import type { Project, ProjectStatus, Task, Team, WorkStatus, Epic, Proposal } from "@/types"
 import { getProjectsApi, createProjectApi, updateProjectApi, deleteProjectApi } from "@/api/projects"
 import { getAllTasksApi, createAdminTaskApi, updateTaskApi, deleteTaskApi, adminReviewSubmissionApi } from "@/api/tasks"
 import { getAllEpicsApi, getProjectEpicsApi, createEpicApi, deleteEpicApi, updateEpicApi } from "@/api/epics"
@@ -71,7 +71,6 @@ function AdminDashboard() {
 
   /* data */
   const { data: tasks    = [], isLoading } = useQuery<Task[]>({    queryKey: ["tasks", "admin"], queryFn: getAllTasksApi })
-  const { data: teams    = [] }            = useQuery<Team[]>({    queryKey: ["teams"],          queryFn: getTeamsApi })
   const { data: projects = [] }            = useQuery<Project[]>({ queryKey: ["projects"],       queryFn: getProjectsApi })
   const { data: allEpics = [] }            = useQuery<Epic[]>({    queryKey: ["epics", "all"],   queryFn: getAllEpicsApi })
 
@@ -1006,7 +1005,7 @@ function CreateTaskForEpicModal({ epic, onClose, onCreated, prefillTitle, prefil
             className="flex-1 h-10 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
             Cancel
           </button>
-          <button onClick={() => mutation.mutate()} disabled={!title.trim() || !defaultModule || mutation.isPending}
+          <button onClick={() => mutation.mutate()} disabled={!title.trim() || !targetModule || mutation.isPending}
             className="flex-1 h-10 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-50">
             {mutation.isPending ? "Creating…" : "Create task"}
           </button>
@@ -1477,96 +1476,6 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
           <button onClick={() => mutation.mutate()} disabled={!title.trim() || mutation.isPending}
             className="flex-1 h-10 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-50">
             {mutation.isPending ? "Creating…" : "Create"}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ================================================================== */
-/* Create task modal                                                   */
-/* ================================================================== */
-function CreateTaskModal({ project, onClose, onCreated }: {
-  project: Project; onClose: () => void; onCreated: () => void
-}) {
-  const [epicId,       setEpicId]       = useState("")
-  const [title,        setTitle]        = useState("")
-  const [description,  setDescription]  = useState("")
-  const [dueDate,      setDueDate]      = useState("")
-  const [expectedTime, setExpectedTime] = useState("")
-  const [error,        setError]        = useState("")
-
-  const { data: epics = [] } = useQuery<Epic[]>({
-    queryKey: ["epics", project.id],
-    queryFn: () => getProjectEpicsApi(project.id),
-    enabled: true,
-  })
-
-  const selectedEpic  = epics.find((e) => e.id === epicId)
-  const defaultModule = selectedEpic?.modules[0]
-
-  const mutation = useMutation({
-    mutationFn: () => {
-      if (!defaultModule) throw new Error("No module available")
-      return createAdminTaskApi(defaultModule.id, {
-        title,
-        description: description || undefined,
-        due_date: dueDate ? new Date(dueDate).toISOString() : undefined,
-        expected_time: expectedTime ? Number(expectedTime) : undefined,
-      })
-    },
-    onSuccess: onCreated,
-    onError: (e: any) => setError(e?.response?.data?.detail ?? "Failed to create task"),
-  })
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-[70] flex items-end sm:items-center justify-center p-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-2xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-base font-semibold text-black">New task</p>
-            <p className="text-xs text-gray-400 mt-0.5">{project.title}</p>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-black transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-1 block">Epic *</label>
-          <select value={epicId} onChange={(e) => setEpicId(e.target.value)}
-            className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-black transition-colors">
-            <option value="">Select epic…</option>
-            {epics.map((e) => <option key={e.id} value={e.id}>{e.title}</option>)}
-          </select>
-        </div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title" autoFocus
-          className="w-full h-10 px-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-black transition-colors" />
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description (optional)" rows={2}
-          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:border-black transition-colors" />
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-1 block">Due date</label>
-            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-              className="w-full h-9 px-2.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-black transition-colors" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-1 block">Expected hours</label>
-            <input type="number" min="0" step="0.5" value={expectedTime} onChange={(e) => setExpectedTime(e.target.value)}
-              placeholder="e.g. 3"
-              className="w-full h-9 px-2.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-black transition-colors" />
-          </div>
-        </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
-        <div className="flex gap-2">
-          <button onClick={onClose}
-            className="flex-1 h-10 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-            Cancel
-          </button>
-          <button onClick={() => mutation.mutate()} disabled={!title.trim() || !epicId || !defaultModule || mutation.isPending}
-            className="flex-1 h-10 bg-black text-white rounded-xl text-sm font-medium hover:bg-gray-900 transition-colors disabled:opacity-50">
-            {mutation.isPending ? "Creating…" : "Create task"}
           </button>
         </div>
       </div>

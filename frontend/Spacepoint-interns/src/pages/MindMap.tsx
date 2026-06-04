@@ -11,7 +11,7 @@ import "@xyflow/react/dist/style.css"
 import { ArrowLeft, X, Save, Pencil, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
-import type { Epic, TaskBrief, WorkStatus } from "@/types"
+import type { Epic, WorkStatus } from "@/types"
 import {
   getEpicForMapApi, getLayoutApi, saveLayoutApi,
   getTaskNoteApi, updateTaskNoteApi,
@@ -49,7 +49,7 @@ function ModuleNode({ data, selected }: NodeProps) {
     )}>
       <p className="text-[9px] font-bold uppercase tracking-widest text-[#d6c7e1] mb-1 text-center">Module</p>
       <p className="text-sm font-bold text-center">{String(data.label)}</p>
-      {data.description && (
+      {!!data.description && (
         <p className="text-[10px] text-[#d6c7e1] mt-1.5 leading-relaxed line-clamp-2 text-center opacity-80">
           {String(data.description)}
         </p>
@@ -78,7 +78,7 @@ function TaskNode({ data, selected }: NodeProps) {
           <span className="text-[10px] text-gray-400">{Number(data.assigneeCount)} intern{Number(data.assigneeCount) !== 1 ? "s" : ""}</span>
         )}
       </div>
-      {data.note && (
+      {!!data.note && (
         <p className="text-[10px] text-gray-400 mt-1.5 italic line-clamp-2">"{String(data.note)}"</p>
       )}
     </div>
@@ -177,8 +177,8 @@ export default function MindMap() {
   const [noteDirty,      setNoteDirty]      = useState(false)
   const [editingDesc,    setEditingDesc]    = useState(false)
   const [editDescText,   setEditDescText]   = useState("")
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [initialised, setInitialised]  = useState(false)
 
   // ── Fetch epic ───────────────────────────────────────────────────────────
