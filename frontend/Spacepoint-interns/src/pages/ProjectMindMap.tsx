@@ -69,7 +69,7 @@ function buildProjectGraph(
       id: `epic-${epic.id}`,
       type: "epicNode",
       position: saved[`epic-${epic.id}`] ?? { x: epicCx, y: ROW_EPIC },
-      data: { label: epic.title, status: epic.status, description: epic.description ?? null },
+      data: { label: epic.title, status: epic.status, description: epic.description ?? null, team_name: epic.team_name ?? null, leader_name: epic.leader_name ?? null },
     })
     edges.push({
       id: `e-proj-${epic.id}`,
@@ -108,7 +108,7 @@ function buildProjectGraph(
           id: `task-${task.id}`,
           type: "taskNode",
           position: saved[`task-${task.id}`] ?? { x: taskX, y: ROW_EPIC + ROW_MOD + ROW_TASK },
-          data: { label: task.title, status: task.status, assigneeCount: task.assignee_count, taskId: task.id },
+          data: { label: task.title, status: task.status, assigneeCount: task.assignee_count, assignees: task.assignees ?? [], taskId: task.id },
         })
         edges.push({
           id: `e-mod-task-${task.id}`,

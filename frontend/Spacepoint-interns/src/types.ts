@@ -39,6 +39,7 @@ export interface TaskBrief {
   expected_time: number | null
   actual_time: number | null
   assignee_count: number
+  assignees: User[]
 }
 
 export interface Module {
@@ -60,6 +61,8 @@ export interface Epic {
   created_by: string | null
   created_at: string
   modules: Module[]
+  team_name: string | null
+  leader_name: string | null
 }
 
 export interface Submission {

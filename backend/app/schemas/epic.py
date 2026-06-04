@@ -3,6 +3,7 @@ from typing import Optional, List, Any
 from datetime import datetime
 from uuid import UUID
 from app.models.enums import WorkStatus
+from app.schemas.user import UserOut
 
 
 # ── forward-declared to avoid circular imports ────────────────────────────────
@@ -14,6 +15,7 @@ class TaskBriefOut(BaseModel):
     expected_time: Optional[float] = None
     actual_time: Optional[float] = None
     assignee_count: int = 0
+    assignees: List[UserOut] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -24,6 +26,7 @@ class TaskBriefOut(BaseModel):
         assignees = loaded.get("assignees") or []
         obj = {k: v for k, v in data.__dict__.items() if not k.startswith("_")}
         obj["assignee_count"] = len(assignees)
+        obj["assignees"] = assignees
         return obj
 
     class Config:
@@ -78,6 +81,8 @@ class EpicOut(EpicBase):
     created_by: Optional[UUID] = None
     created_at: datetime
     modules: List[ModuleBriefOut] = []
+    team_name: Optional[str] = None
+    leader_name: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -88,6 +93,13 @@ class EpicOut(EpicBase):
         modules = loaded.get("modules") or []
         obj = {k: v for k, v in data.__dict__.items() if not k.startswith("_")}
         obj["modules"] = modules
+        team = loaded.get("team")
+        if team is not None:
+            obj["team_name"] = team.name
+            team_loaded = team._sa_instance_state.dict
+            leader = team_loaded.get("leader")
+            if leader is not None:
+                obj["leader_name"] = leader.full_name
         return obj
 
     class Config:

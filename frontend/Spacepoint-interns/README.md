@@ -9,18 +9,10 @@ React SPA built with Vite, TypeScript, TanStack Router, and Tailwind CSS.
 ## Setup
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Configure environment variables
-cp .env.example .env
-# Set the API base URL (see Environment Variables below)
-
-# 3. Start the dev server
-npm run dev
+cp .env.example .env        # set VITE_API_URL
+npm run dev                 # http://localhost:5173
 ```
-
-App will be available at `http://localhost:5173`
 
 ## Environment Variables
 
@@ -28,80 +20,141 @@ App will be available at `http://localhost:5173`
 VITE_API_URL=http://localhost:8000
 ```
 
-For production (Vercel), add this in the Vercel dashboard under **Project → Settings → Environment Variables**.
+For production (Vercel): add in **Project → Settings → Environment Variables**.
 
-## Build
+## Build & Deploy
 
 ```bash
-npm run build
+npm run build               # outputs to dist/
 ```
 
-Output goes to `dist/`. This is what Vercel deploys.
-
-## Deploying to Vercel
-
-1. Push the repo to GitHub
-2. Import the project at [vercel.com](https://vercel.com)
-3. Set **Root Directory** to `frontend/Spacepoint-interns` if deploying from the monorepo
-4. Add the `VITE_API_URL` environment variable pointing to your hosted backend
-5. Deploy — Vercel auto-detects Vite
-
-> Make sure your backend has CORS configured to allow your Vercel domain.
+Vercel deployment:
+1. Push repo to GitHub
+2. Import at vercel.com — set Root Directory to `frontend/Spacepoint-interns`
+3. Add `VITE_API_URL` pointing to hosted backend
+4. Backend CORS must allow the Vercel domain
 
 ## Project Structure
 
 ```
 src/
-├── api/             # Axios API functions (one file per resource:
-│                    #   epics, tasks, proposals, tracker, mindmap, …)
-├── assets/          # Static assets (logo, icons)
+├── api/                    # Axios API functions, one file per resource
+│   ├── client.ts           # Axios instance + JWT interceptor + refresh logic
+│   ├── auth.ts, users.ts, teams.ts
+│   ├── projects.ts, epics.ts, modules.ts, tasks.ts
+│   ├── proposals.ts        # intern/leader/admin proposal endpoints
+│   ├── tracker.ts, mindmap.ts
+│   └── notifications.ts
+├── assets/                 # logo.svg, icons
 ├── components/
-│   ├── kanban/      # Kanban board, task cards, modals, proposal modals
-│   ├── layout/      # Navbar, Layout wrapper
-│   └── ui/          # Shared UI primitives
-├── context/         # AuthContext (current user, login/logout)
-├── pages/           # Route-level pages (Dashboard, Tracker, MindMap, …)
-├── lib/             # Utilities (cn, etc.)
-├── routeTree.tsx    # Route definitions
-└── types.ts         # Shared TypeScript types
+│   ├── kanban/
+│   │   ├── KanbanBoard.tsx         # multi-role board (intern/leader/admin)
+│   │   ├── EpicDetailModal.tsx     # epic detail + edit (portaled, NOT Radix Dialog)
+│   │   ├── TaskModal.tsx           # task detail + edit + assign + review + submit
+│   │   ├── TaskCard.tsx, Column.tsx
+│   │   └── CreateSubtaskModal.tsx  # leader "New task" modal (legacy name)
+│   ├── mindmap/
+│   │   └── SharedNodes.tsx         # shared ReactFlow node components for both map pages
+│   ├── layout/
+│   │   ├── Navbar.tsx              # bell (polls 30s), mobile menu, logout
+│   │   └── Layout.tsx
+│   ├── ui/                         # shadcn primitives (button, card, dialog)
+│   ├── ManageModulesModal.tsx      # module CRUD — view/edit/delete open stacked dialogs
+│   ├── ModuleDetailDialog.tsx      # shared module detail dialog (portaled)
+│   └── ProposalDetailDialog.tsx    # shared proposal detail dialog (portaled)
+├── context/
+│   └── AuthContext.tsx             # currentUser, login, logout
+├── pages/
+│   ├── Dashboard.tsx               # admin: project columns + ProjectTasksPanel
+│   ├── Tracker.tsx                 # work tracker table + stat cards + Excel + PDF export
+│   ├── MindMap.tsx                 # per-epic ReactFlow mind map
+│   ├── ProjectMindMap.tsx          # full project map (project→epics→modules→tasks)
+│   ├── Admin.tsx                   # user & team management
+│   ├── Calendar.tsx, Leaderboard.tsx, Login.tsx, Profile.tsx
+├── lib/utils.ts                    # cn() helper
+├── routeTree.tsx                   # all route definitions
+└── types.ts                        # TypeScript types (User, Epic, Module, Task, Proposal, …)
 ```
 
-## Pages
+## Routes
 
-| Route | Who | Purpose |
-|-------|-----|---------|
-| `/` | all | Admin dashboard (projects/epics/tasks) or kanban board (leader/intern) |
-| `/tracker` | all | Work tracker table + PDF export (print) |
-| `/mind-map/$epicId` | all | Per-epic ReactFlow mind map |
+| Path | Who | Page |
+|------|-----|------|
+| `/` | all | Admin dashboard or KanbanBoard |
+| `/tracker` | all | Work tracker |
+| `/mind-map/$epicId` | all | Per-epic mind map |
+| `/mind-map/project/$projectId` | admin/leader | Full project mind map |
 | `/calendar` | all | Calendar |
 | `/leaderboard` | all | Leaderboard |
 | `/admin` | admin | User & team management |
-| `/profile` | all | Current user profile |
+| `/profile` | all | Profile |
+| `/login` | public | Login |
 
 ## Key Libraries
 
 | Library | Purpose |
 |---------|---------|
-| TanStack Router | Client-side routing (type-safe) |
-| TanStack Query | Data fetching, caching, optimistic updates |
-| dnd-kit | Drag-and-drop for kanban boards |
-| @xyflow/react | ReactFlow — the epic mind map canvas |
-| Axios | HTTP client with JWT interceptor + token refresh |
-| Tailwind CSS | Styling |
+| TanStack Router v1 | Type-safe client-side routing |
+| TanStack Query v5 | Server state, caching, mutations |
+| dnd-kit | Drag-and-drop for kanban |
+| @xyflow/react | Mind map canvas (ReactFlow) |
+| xlsx (SheetJS) | Excel export in Tracker |
+| Axios | HTTP client + JWT interceptor |
+| Tailwind CSS v3 | Styling |
 | Lucide React | Icons |
 
-## Notes
+## Feature Notes
 
-- **Board model** — admin & leader dashboards are an epic→task drill-down. The board
-  shows draggable **epic cards** first; clicking one drills into its **task cards**
-  (also draggable). Modules are not shown on the board. Interns get a flat task board.
-- **`CreateSubtaskModal.tsx`** is a legacy filename — it actually exports the leader's
-  **`CreateTaskModal`** (epic + module picker, inline "+ New module", assignment).
-- **Module creation** — leaders create modules from the New Task modal. Admin task
-  modals (`CreateTaskForEpicModal`, `CreateTaskModal` in `Dashboard.tsx`) currently
-  auto-use the epic's default module (no admin module picker yet).
-- **MindMap** reads its route param with `useParams({ strict: false })` — the `{ from }`
-  form throws with the manually-defined pathless `_layout` route tree.
-- **PDF export** on the Tracker page uses the browser's print dialog scoped to a printable region (no extra dependency).
-- **Optimistic updates** are used for all kanban drag-and-drop status changes (rollback on error).
-- **Roles** drive the UI: the Dashboard renders `AdminDashboard` for admins and `KanbanBoard` for leaders/interns; the navbar shows the Admin link only to admins.
+### Dashboard (admin)
+- Project columns with drag-and-drop (dnd-kit). Each column = a project status.
+- **ProjectCard** — shows "Map" + "Manage" buttons inline. Map → `/mind-map/project/$id`.
+- **ProjectTasksPanel** — slide-in panel, Screen 1 = epic list, Screen 2 = epic tasks + proposals tab.
+- Epic rows in the list each have an inline "Mind map" button.
+- All modals are `createPortal(…, document.body)` — required because dnd-kit transforms break `position: fixed`.
+
+### Kanban (leader / intern)
+- Leader view: epic columns (drag by status) → drill into epic → task columns.
+- Intern view: flat task columns.
+- **TaskModal** — leaders can edit title/description/deadline/expected hours, manage assignees (add/remove from team), review submissions. Interns can start/submit tasks.
+- **EpicDetailModal** — leaders can edit epic title/description/status inline.
+- **LeaderProposalsModal** — click any proposal card → ProposalDetailDialog with Accept/Reject.
+- **InternProposalsModal** — "My proposals" button with badge (clears on open, persisted in localStorage). Pending = purple, reviewed = green/red.
+
+### Mind maps
+- **Per-epic map** (`MindMap.tsx`) — Epic → Module → Task nodes. Drag to reposition (saved to backend). Click module → edit description. Click task → edit note (intern) or read note (leader/admin).
+- **Project map** (`ProjectMindMap.tsx`) — Project → Epics → Modules → Tasks. Auto-layout. Drag to reposition (saved to localStorage). Click any node → side panel with full description + edit controls (module description editable by admin/leader, task notes by intern).
+- **`SharedNodes.tsx`** — single source of truth for EpicNode, ModuleNode, TaskNode, ProjectNode. Both map pages import from here.
+
+### Work Tracker
+- Table columns: Task · Module · Epic · Start date · Deadline · Status · Expected · Actual · Submitted · Score · Submission link
+- Stat cards: Completed · On time · Total hours · Avg time delta · Score (avg across reviewed tasks)
+- **Export sheet** → `.xlsx` with Tasks sheet + Summary sheet (SheetJS)
+- **Export PDF** → `@media print` reveals a hidden `#pdf-report` div (A4 landscape):
+  - Logo + SpacePoint branding
+  - Certification paragraph (name, team name, date range, task counts)
+  - 4 stat boxes (Completed, On time, Hours, Score)
+  - Clean table (no submission links), header repeats every page, rows don't split
+  - Team name fetched from `/intern/team`, `/leader/team`, or matched from admin's allTeams
+
+### Proposals flow
+- **Intern** submits via "Propose idea" button → `POST /intern/epics/{id}/proposals`
+- **Intern** views status via "My proposals" button → `GET /intern/proposals` (polls 30s)
+- **Leader** reviews via "Proposals" button → accept or reject → notification sent to intern automatically
+- **Admin** reviews from the proposals tab inside the epic panel
+
+### Notifications
+- Bell in Navbar polls every 30s (`refetchInterval: 30_000`)
+- Backend sends notifications on: task assigned, proposal accepted, proposal rejected
+
+### Modal / portal pattern
+All custom modals use `createPortal(…, document.body)`. This is critical — dnd-kit applies CSS transforms which break `position: fixed` inside transformed parents.
+
+**Never use Radix `Dialog`** for modals that need to layer above React Flow or dnd-kit canvases. Use custom fixed divs with portals instead.
+
+z-index layers:
+- `z-50` — standard modals (LeaderProposalsModal, InternProposalsModal)
+- `z-[9990]` — EpicDetailModal
+- `z-[9998]` — ManageModulesModal
+- `z-[9999]` — ModuleDetailDialog, ProposalDetailDialog, ModuleEditDialog, mind map NodeDetailDialog
+
+Always add `onClick={e => e.stopPropagation()}` on the inner card when the backdrop has `onClick={onClose}`.

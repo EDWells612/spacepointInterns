@@ -32,7 +32,7 @@ function buildGraph(
     id: `epic-${epic.id}`,
     type: "epicNode",
     position: epicPos,
-    data: { label: epic.title, status: epic.status },
+    data: { label: epic.title, status: epic.status, team_name: epic.team_name ?? null, leader_name: epic.leader_name ?? null },
   })
 
   const modCount  = epic.modules.length
@@ -75,6 +75,7 @@ function buildGraph(
           label: task.title,
           status: task.status,
           assigneeCount: task.assignee_count,
+          assignees: task.assignees ?? [],
           note: notes[task.id] ?? null,
           taskId: task.id,
         },

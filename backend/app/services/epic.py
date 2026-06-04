@@ -6,12 +6,15 @@ from uuid import UUID
 
 from app.models.epic import Epic
 from app.models.module import Module
+from app.models.task import Task
+from app.models.team import Team
 from app.schemas.epic import EpicCreate, EpicUpdate
 
 
 def _epic_options():
     return [
-        selectinload(Epic.modules).selectinload(Module.tasks),
+        selectinload(Epic.modules).selectinload(Module.tasks).selectinload(Task.assignees),
+        selectinload(Epic.team).selectinload(Team.leader),
     ]
 
 
